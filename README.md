@@ -1,5 +1,5 @@
 # What is this?
-Jigsaw is a `declaratively configurable` `mock` `grpc` api that emits tracing information.
+Jigsaw is a `configurable` `mock` `grpc` api that emits tracing information.
 
 # What is it for?
 The idea is to use it as a building block when testing microservice and instrumentation architectures.
@@ -12,7 +12,7 @@ Yeah, usually. But the microservices involved are always justifiably contrived, 
 - be able to create scenarios of arbitrary complexity to simulate
 - not create a new codebase for each contrived microservice of my own design
 
-# What do you mean by `declaratively configurable`?
+# What do you mean by `configurable`?
 A vanilla jigsaw instance has 3 (number subject to change) unary grpc methods literally named `A`, `B`, and `C` that respond with nothing and do nothing.
 
 You can create a configuration that opaquely defines the internal logic to perform for each method - including invocations of grpc methods in *other jigsaw instances* - and jigsaw will enact that logic when the method is invoked as well as emit corresponding tracing information.
