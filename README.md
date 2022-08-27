@@ -18,3 +18,13 @@ I plan to eventually include chaos (fallibility) in the configuration as well.
 
 # What do you mean by `mock`?
 Ultimately, jigsaw doesn't really _do_ anything when reacting to a stimulus other than sleep or invoke a grpc method in another microservice. The sleep operations are basically meant to simulate I/O. For instance, one jigsaw instance might simulate the role of a database, and you could put a comparatively long sleep in one of its configured grpc methods to simulate a read/write.
+
+---
+# Development
+The `tonic-build` build dependency uses `prost`, which requires `protoc`.
+
+To get it on ubuntu, do this.
+```apt install -y protobuf-compiler libprotobuf-dev```
+
+## How to test locally
+```./grpcurl -plaintext -proto ./proto/jigsaw.proto -import-path ./proto localhost:6379 jigsaw.Jigsaw/A```

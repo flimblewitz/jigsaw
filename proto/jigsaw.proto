@@ -1,0 +1,10 @@
+syntax = "proto3";
+package jigsaw;
+
+service Jigsaw {
+  rpc A(Nothing) returns (Nothing);
+  rpc B(Nothing) returns (Nothing);
+  rpc C(Nothing) returns (Nothing);
+}
+
+message Nothing {}
