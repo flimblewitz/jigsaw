@@ -152,6 +152,10 @@ impl Action {
                 service_port,
                 grpc_method,
             } => {
+                println!(
+                    "Starting action: {service_address}:{service_port}. Time: {}",
+                    chrono::Utc::now().to_rfc3339(),
+                );
                 // let mut client = JigsawClient::connect("http://localhost:6379")
                 let mut client = JigsawClient::connect(format!("{service_address}:{service_port}"))
                     .await
@@ -164,20 +168,23 @@ impl Action {
                     GrpcMethod::B => client.b(request).await.unwrap(),
                     GrpcMethod::C => client.c(request).await.unwrap(),
                 };
+
+                println!(
+                    "Ending action: {service_address}:{service_port}. Time: {}",
+                    chrono::Utc::now().to_rfc3339(),
+                );
             }
             Action::Sleep {
                 tracing_name,
                 duration_ms,
             } => {
                 println!(
-                    "Starting action: {}. Time: {}",
-                    tracing_name,
+                    "Starting action: {tracing_name}. Time: {}",
                     chrono::Utc::now().to_rfc3339()
                 );
                 sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
                 println!(
-                    "Ending action: {}. Time: {}",
-                    tracing_name,
+                    "Ending action: {tracing_name}. Time: {}",
                     chrono::Utc::now().to_rfc3339()
                 );
             }
