@@ -1,0 +1,66 @@
+// you can minify this into a string and pass it as the CONFIG_JSON environment variable
+{
+  "service_name": "default_jigsaw",
+  "grpc_method_a": {
+    "tracing_name": "do_a_barrel_roll",
+    "steps": [
+      {
+        "Action": {
+          "Sleep": {
+            "tracing_name": "listen_to_peppy",
+            "duration_ms": 1000
+          }
+        }
+      },
+      {
+        "ConcurrentActions": [
+          {
+            "Sleep": {
+              "tracing_name": "press L",
+              "duration_ms": 2000
+            }
+          },
+          {
+            "Sleep": {
+              "tracing_name": "press R",
+              "duration_ms": 1500
+            }
+          },
+          {
+            "Function": {
+              "tracing_name": "accidentally unplug controller",
+              "steps": [
+                {
+                  "Action": {
+                    "Sleep": {
+                      "tracing_name": "instinctually yank the controller to physically pull the arwing into a barrel roll",
+                      "duration_ms": 1000
+                    }
+                  }
+                },
+                {
+                  "Action": {
+                    "Sleep": {
+                      "tracing_name": "unplug the cord, unintentionally harmonizing your scream with the sound of slippy perishing",
+                      "duration_ms": 1000
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "Action": {
+          "Sleep": {
+            "tracing_name": "die horribly",
+            "duration_ms": 1000
+          }
+        }
+      }
+    ]
+  },
+  "grpc_method_b": null,
+  "grpc_method_c": null
+}
