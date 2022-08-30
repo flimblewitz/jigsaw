@@ -1,35 +1,7 @@
-use tonic::{transport::Server, Request, Response, Status};
-mod jigsaw {
-    tonic::include_proto!("jigsaw");
-}
-use jigsaw::jigsaw_server::{Jigsaw, JigsawServer};
-use jigsaw::Nothing;
+use tonic::transport::Server;
 
-mod config;
-use config::JigsawConfig;
-
-pub struct JigsawInstance {
-    config: JigsawConfig,
-}
-
-#[tonic::async_trait]
-impl Jigsaw for JigsawInstance {
-    async fn a(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
-        self.config.grpc_method_a.enact().await;
-        Ok(Response::new(Nothing {}))
-    }
-    async fn b(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
-        self.config.grpc_method_b.enact().await;
-        Ok(Response::new(Nothing {}))
-    }
-    async fn c(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
-        self.config.grpc_method_c.enact().await;
-        Ok(Response::new(Nothing {}))
-    }
-}
+mod jigsaw_instance;
+use jigsaw_instance::JigsawInstance;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -100,17 +72,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   "grpc_method_b": null,
   "grpc_method_c": null
 }"#;
-    let config: JigsawConfig = serde_json::from_str(json).unwrap();
-
-    let jigsaw = JigsawInstance { config };
-
-    println!("Starting {}", jigsaw.config.service_name);
+    let jigsaw = JigsawInstance::new(&json);
 
     // let addr = "[::1]:50051".parse()?; // apparently ipv6 isn't working, maybe only in docker containers?
     let addr = "127.0.0.1:6379".parse()?;
 
     Server::builder()
-        .add_service(JigsawServer::new(jigsaw))
+        .add_service(jigsaw.as_server())
         .serve(addr)
         .await?;
 
