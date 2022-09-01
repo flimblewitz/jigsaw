@@ -6,6 +6,8 @@ use jigsaw_instance::JigsawInstance;
 // todo: I think using "current_thread" instead of the fuller version is noticeably slowing it down. My rudimentary tracing indicates seconds of delay
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+
     let config_json = env::var("CONFIG_JSON")?;
     let jigsaw_server = JigsawInstance::new(&config_json).as_server();
 

@@ -11,6 +11,8 @@ use tonic_jigsaw::Nothing;
 use serde::Deserialize;
 use tokio::time::{sleep_until, Duration, Instant};
 
+use tracing::{info, instrument};
+
 pub struct JigsawInstance {
     config: JigsawConfig,
 }
@@ -22,7 +24,7 @@ impl JigsawInstance {
     }
 
     // other modules (like main) can't easily recognize the same tonic-built types (contained in the "tonic_jigsaw" module defined at the top of this file)
-    // there is a way, but it's intrusive. You ahve to make the tonic_jigsaw module public and then use the following two lines in other modules:
+    // there is a way, but it's intrusive. You have to make the tonic_jigsaw module public and then use the following two lines in other modules:
     /*
         use crate::tonic_jigsaw::jigsaw_server::Jigsaw;
         use jigsaw_instance::tonic_jigsaw;
@@ -36,18 +38,21 @@ impl JigsawInstance {
 
 #[tonic::async_trait]
 impl Jigsaw for JigsawInstance {
+    #[instrument(skip_all)]
     async fn a(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
+        info!("Got a request: {:?}", request);
         self.config.grpc_method_a.enact().await;
         Ok(Response::new(Nothing {}))
     }
+    #[instrument(skip_all)]
     async fn b(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
+        info!("Got a request: {:?}", request);
         self.config.grpc_method_b.enact().await;
         Ok(Response::new(Nothing {}))
     }
+    #[instrument(skip_all)]
     async fn c(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        println!("Got a request: {:?}", request);
+        info!("Got a request: {:?}", request);
         self.config.grpc_method_c.enact().await;
         Ok(Response::new(Nothing {}))
     }
@@ -63,10 +68,11 @@ struct JigsawConfig {
 
 // I don't want to copy and paste this `if let` for each grpc method, hence the following impl
 // rust doesn't let us write impl blocks for externally defined types like Option, so I have to wrap it in my own type
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 struct OptionalFunction(Option<Function>);
 
 impl OptionalFunction {
+    #[instrument(name = "OptionalFunction.enact", skip(self))]
     async fn enact(&self) {
         if let Some(f) = &self.0 {
             f.enact().await;
@@ -74,68 +80,50 @@ impl OptionalFunction {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 struct Function {
     tracing_name: String,
-    steps: Vec<Operation>,
+    operations: Vec<Operation>,
 }
 
 impl Function {
     #[async_recursion]
+    #[instrument(name = "Function.enact", skip(self), fields(tracing_name = self.tracing_name))]
     async fn enact(&self) {
-        println!(
-            "Starting function: {}. Time: {}",
-            self.tracing_name,
-            chrono::Utc::now().to_rfc3339()
-        );
-        for step in &self.steps {
-            step.enact().await;
+        info!("starting");
+        for operation in &self.operations {
+            operation.enact().await;
         }
-        println!(
-            "Ending function: {}. Time: {}",
-            self.tracing_name,
-            chrono::Utc::now().to_rfc3339()
-        );
+        info!("ending");
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 enum Operation {
     ConcurrentActions(Vec<Action>),
     Action(Action),
 }
 
 impl Operation {
+    #[instrument(name = "Operation.enact", skip(self))]
     async fn enact(&self) {
         match self {
             Operation::ConcurrentActions(actions) => {
-                let handles: Vec<_> = actions
-                    .iter()
-                    .map(|action| {
-                        // this implementation is probably suboptimal, but I can't pass a borrow into a future because its lifetime isn't necessarily long enough for the future's lifetime. What also kind of sucks is that I have to add the Clone derivation to almost every type in this module
-                        let cloned_action = action.clone();
-                        tokio::spawn(async move { cloned_action.enact().await })
-                    })
-                    .collect();
-                for handle in handles {
-                    handle.await.unwrap();
-                }
+                let action_futures: Vec<_> = actions.iter().map(|action| action.enact()).collect();
+                futures::future::join_all(action_futures).await;
             }
             Operation::Action(action) => action.enact().await,
         }
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 enum Action {
     Function(Function),
     CallService {
         service_address: String,
         service_port: String,
         grpc_method: GrpcMethod,
-        // todo
-        // timeout_ms: u64,
-        // retries: u64,
     },
     Sleep {
         tracing_name: String,
@@ -144,6 +132,7 @@ enum Action {
 }
 
 impl Action {
+    #[instrument(name = "Action.enact", skip(self), fields(tracing_name))]
     async fn enact(&self) {
         match self {
             Action::Function(f) => f.enact().await,
@@ -152,10 +141,13 @@ impl Action {
                 service_port,
                 grpc_method,
             } => {
-                println!(
-                    "Starting action: {service_address}:{service_port}. Time: {}",
-                    chrono::Utc::now().to_rfc3339(),
+                tracing::Span::current().record(
+                    "tracing_name",
+                    format!("{service_address}:{service_port}/{grpc_method:?}"),
                 );
+
+                info!("starting");
+
                 // let mut client = JigsawClient::connect("http://localhost:6379")
                 let mut client = JigsawClient::connect(format!("{service_address}:{service_port}"))
                     .await
@@ -169,30 +161,22 @@ impl Action {
                     GrpcMethod::C => client.c(request).await.unwrap(),
                 };
 
-                println!(
-                    "Ending action: {service_address}:{service_port}. Time: {}",
-                    chrono::Utc::now().to_rfc3339(),
-                );
+                info!("ending");
             }
             Action::Sleep {
                 tracing_name,
                 duration_ms,
             } => {
-                println!(
-                    "Starting action: {tracing_name}. Time: {}",
-                    chrono::Utc::now().to_rfc3339()
-                );
+                tracing::Span::current().record("tracing_name", tracing_name);
+                info!("starting");
                 sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
-                println!(
-                    "Ending action: {tracing_name}. Time: {}",
-                    chrono::Utc::now().to_rfc3339()
-                );
+                info!("ending");
             }
         }
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 enum GrpcMethod {
     A,
     B,

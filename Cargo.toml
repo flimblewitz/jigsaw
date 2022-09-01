@@ -14,8 +14,9 @@ prost = "0.11.0"
 serde =  { version = "1.0", features = ["derive"] }
 serde_json = "1.0.85"
 async-recursion = "1.0.0"
-serde_yaml = "0.9.10"
-chrono = "0.4.22"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+futures = "0.3.24"
 
 [build-dependencies]
 tonic-build = "0.8.0"
