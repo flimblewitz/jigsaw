@@ -1,0 +1,30 @@
+apiVersion: 1
+
+datasources:
+- name: Tempo # todo: include "Trace to logs" configs here. Gotta set app_name as a tag. Also the service.name tag shows up as "unknown service" and tempo uses that for the app name, so fix it. The derived fields and trace to logs docs probably explain more
+  type: tempo
+  access: proxy
+  orgId: 1
+  url: http://tempo:3200
+  basicAuth: false
+  isDefault: false
+  version: 1
+  editable: true
+  apiVersion: 1
+  uid: tempo
+- name: Loki
+  type: loki
+  access: proxy
+  orgId: 1
+  url: http://loki:3100
+  basicAuth: false
+  isDefault: true
+  version: 1
+  editable: true
+  apiVersion: 1
+  jsonData:
+    derivedFields:
+      - datasourceUid: tempo
+        matcherRegex: \"(?:trace_id)\":\"(\w+)\" # jigsaw generates its logs in json format
+        name: trace_id
+        url: $${__value.raw}

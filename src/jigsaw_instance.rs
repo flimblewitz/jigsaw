@@ -11,7 +11,9 @@ use tonic_jigsaw::Nothing;
 use serde::Deserialize;
 use tokio::time::{sleep_until, Duration, Instant};
 
-use tracing::{info, instrument};
+use tracing::{info, instrument, Span};
+
+use crate::get_trace_id::get_trace_id;
 
 pub struct JigsawInstance {
     config: JigsawConfig,
@@ -40,18 +42,25 @@ impl JigsawInstance {
 impl Jigsaw for JigsawInstance {
     #[instrument(skip_all)]
     async fn a(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
+        // info!("trace id: {}", get_trace_id());
+        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
+        Span::current().record("trace_id", get_trace_id());
         info!("Got a request: {:?}", request);
         self.config.grpc_method_a.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
     async fn b(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
+        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
+        Span::current().record("trace_id", get_trace_id());
         info!("Got a request: {:?}", request);
         self.config.grpc_method_b.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
     async fn c(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
+        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
+        Span::current().record("trace_id", get_trace_id());
         info!("Got a request: {:?}", request);
         self.config.grpc_method_c.enact().await;
         Ok(Response::new(Nothing {}))
@@ -72,7 +81,7 @@ struct JigsawConfig {
 struct OptionalFunction(Option<Function>);
 
 impl OptionalFunction {
-    #[instrument(name = "OptionalFunction.enact", skip(self))]
+    #[instrument(name = "OptionalFunction.enact", skip(self), fields(trace_id = get_trace_id()))]
     async fn enact(&self) {
         if let Some(f) = &self.0 {
             f.enact().await;
@@ -88,7 +97,7 @@ struct Function {
 
 impl Function {
     #[async_recursion]
-    #[instrument(name = "Function.enact", skip(self), fields(tracing_name = self.tracing_name))]
+    #[instrument(name = "Function.enact", skip(self), fields(tracing_name = self.tracing_name, trace_id = get_trace_id()))]
     async fn enact(&self) {
         info!("starting");
         for operation in &self.operations {
@@ -105,7 +114,7 @@ enum Operation {
 }
 
 impl Operation {
-    #[instrument(name = "Operation.enact", skip(self))]
+    #[instrument(name = "Operation.enact", skip(self), fields(trace_id = get_trace_id()))]
     async fn enact(&self) {
         match self {
             Operation::ConcurrentActions(actions) => {
@@ -132,7 +141,7 @@ enum Action {
 }
 
 impl Action {
-    #[instrument(name = "Action.enact", skip(self), fields(tracing_name))]
+    #[instrument(name = "Action.enact", skip(self), fields(tracing_name, trace_id = get_trace_id()))]
     async fn enact(&self) {
         match self {
             Action::Function(f) => f.enact().await,
@@ -141,7 +150,7 @@ impl Action {
                 service_port,
                 grpc_method,
             } => {
-                tracing::Span::current().record(
+                Span::current().record(
                     "tracing_name",
                     format!("{service_address}:{service_port}/{grpc_method:?}"),
                 );
@@ -167,7 +176,7 @@ impl Action {
                 tracing_name,
                 duration_ms,
             } => {
-                tracing::Span::current().record("tracing_name", tracing_name);
+                Span::current().record("tracing_name", tracing_name);
                 info!("starting");
                 sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
                 info!("ending");

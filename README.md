@@ -28,7 +28,7 @@ The configuration spec is defined by the types in [the jigsaw_instance.rs file](
 Nope.
 
 Todo:
-- emit tracing information
+- preserve/propagate trace id across services
 - timeouts for the service call action
 - retries for actions
 - chaos (chance of failure) for actions

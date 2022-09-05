@@ -1,0 +1,21 @@
+I probably just want to use the generic opentelemetry subscriber, but it's not clear how to integrate with specific collectors
+  https://github.com/tokio-rs/tracing/tree/master/tracing-opentelemetry
+  I guess it just serves as a medium for other crates
+  there's an example that explains how to use it with jaeger
+    https://github.com/tokio-rs/tracing/tree/master/tracing-opentelemetry
+  and another example that's more complicated
+    https://github.com/tokio-rs/tracing/blob/master/examples/examples/opentelemetry-remote-context.rs
+
+https://docs.rs/tracing/latest/tracing/
+  points to all of those integration crates
+
+I guess this is what I want for loki
+  https://lib.rs/crates/tracing-loki
+
+the jaeger tracing crate seems to be a copy and paste of honeycomb? It even links to the honeycomb github repo. I think they published the honeycomb crate incorrectly?
+  https://docs.rs/tracing-jaeger/latest/tracing_jaeger/
+
+let's keep getting logs please. I expect I want one of these
+  https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/struct.Layer.html
+
+  https://docs.rs/tracing-logfmt/0.1.2/tracing_logfmt/
