@@ -11,7 +11,7 @@ use tonic_jigsaw::Nothing;
 use serde::Deserialize;
 use tokio::time::{sleep_until, Duration, Instant};
 
-use tracing::{info, instrument, Span};
+use tracing::{info, instrument};
 
 use crate::get_trace_id::get_trace_id;
 
@@ -47,26 +47,17 @@ impl JigsawInstance {
 #[tonic::async_trait]
 impl Jigsaw for JigsawInstance {
     #[instrument(skip_all)]
-    async fn a(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
-        Span::current().record("trace_id", get_trace_id());
-        info!("Got a request: {:?}", request);
+    async fn a(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
         self.config.grpc_method_a.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
-    async fn b(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
-        Span::current().record("trace_id", get_trace_id());
-        info!("Got a request: {:?}", request);
+    async fn b(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
         self.config.grpc_method_b.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
-    async fn c(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
-        Span::current().record("trace_id", get_trace_id());
-        info!("Got a request: {:?}", request);
+    async fn c(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
         self.config.grpc_method_c.enact().await;
         Ok(Response::new(Nothing {}))
     }
@@ -101,7 +92,7 @@ struct Function {
 
 impl Function {
     #[async_recursion]
-    #[instrument(name = "Function.enact", skip(self), fields(tracing_name = self.tracing_name, trace_id = get_trace_id()))]
+    #[instrument(name = "Function.enact", skip(self), fields(trace_id = get_trace_id(), _tracing_name = self.tracing_name))]
     async fn enact(&self) {
         info!("starting");
         for operation in &self.operations {
@@ -118,7 +109,6 @@ enum Operation {
 }
 
 impl Operation {
-    #[instrument(name = "Operation.enact", skip(self), fields(trace_id = get_trace_id()))]
     async fn enact(&self) {
         match self {
             Operation::ConcurrentActions(actions) => {
@@ -145,7 +135,6 @@ enum Action {
 }
 
 impl Action {
-    #[instrument(name = "Action.enact", skip(self), fields(tracing_name, trace_id = get_trace_id()))]
     async fn enact(&self) {
         match self {
             Action::Function(f) => f.enact().await,
@@ -153,40 +142,39 @@ impl Action {
                 service_address,
                 service_port,
                 grpc_method,
-            } => {
-                Span::current().record(
-                    "tracing_name",
-                    format!("{service_address}:{service_port}/{grpc_method:?}"),
-                );
-
-                info!("starting");
-
-                // let mut client = JigsawClient::connect("http://localhost:6379")
-                let mut client = JigsawClient::connect(format!("{service_address}:{service_port}"))
-                    .await
-                    .unwrap();
-
-                let request = tonic::Request::new(Nothing {});
-
-                match grpc_method {
-                    GrpcMethod::A => client.a(request).await.unwrap(),
-                    GrpcMethod::B => client.b(request).await.unwrap(),
-                    GrpcMethod::C => client.c(request).await.unwrap(),
-                };
-
-                info!("ending");
-            }
+            } => issue_grpc_request(service_address, service_port, grpc_method).await,
             Action::Sleep {
                 tracing_name,
                 duration_ms,
-            } => {
-                Span::current().record("tracing_name", tracing_name);
-                info!("starting");
-                sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
-                info!("ending");
-            }
+            } => sleep(tracing_name, duration_ms).await,
         }
     }
+}
+
+#[instrument(fields(trace_id = get_trace_id()))]
+async fn issue_grpc_request(service_address: &str, service_port: &str, grpc_method: &GrpcMethod) {
+    info!("starting");
+
+    let mut client = JigsawClient::connect(format!("{service_address}:{service_port}"))
+        .await
+        .unwrap();
+
+    let request = tonic::Request::new(Nothing {});
+
+    match grpc_method {
+        GrpcMethod::A => client.a(request).await.unwrap(),
+        GrpcMethod::B => client.b(request).await.unwrap(),
+        GrpcMethod::C => client.c(request).await.unwrap(),
+    };
+
+    info!("ending");
+}
+
+#[instrument(fields(trace_id = get_trace_id()))]
+async fn sleep(_tracing_name: &str, duration_ms: &u64) {
+    info!("starting");
+    sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
+    info!("ending");
 }
 
 #[derive(Deserialize, Debug)]

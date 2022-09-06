@@ -23,6 +23,12 @@ the official getting started example has too much going on for my interests. I w
 
 I'm not sure if this unexplained docker-compose.yaml runs defaults or not
   https://github.com/grafana/loki/blob/main/production/docker-compose.yaml
+
+### Counterintuitive behavior
+The `loki-tracing` crate appears to be bugged in two ways:
+- it automatically adds a label for the log `level`, which is against the official best practices
+- it doesn't include the trace id on the events of the first span in a trace. I'm pretty sure it's this crate and not the `tracing` crate because tempo is able to see the events for such spans. I ended up not including placeholder events where the traces' root spans are created (the grpc methods) because it didn't seem worth worrying about
+
 ### Push a trace log manually 
 https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
 ```
