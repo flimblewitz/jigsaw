@@ -25,6 +25,7 @@ impl JigsawInstance {
         Self { config }
     }
 
+    // todo: try to make this cleaner
     // other modules (like main) can't easily recognize the same tonic-built types (contained in the "tonic_jigsaw" module defined at the top of this file)
     // there is a way, but it's intrusive. You have to make the tonic_jigsaw module public and then use the following two lines in other modules:
     /*
@@ -32,9 +33,14 @@ impl JigsawInstance {
         use jigsaw_instance::tonic_jigsaw;
     */
     // but because the only other module in question really only needs something that implements all the traits that make up a tonic "Service", and that's all neatly wrapped up for us in the generated JigsawServer type, we can just return the JigsawServer type here and be done with it
-    // todo: make the only public function in this file one that outputs a JigsawServer
+    // todo: this is dependent on how to expose the service name, but consider making the only public function in this file one that outputs a JigsawServer
     pub fn as_server(self) -> JigsawServer<Self> {
         JigsawServer::new(self)
+    }
+
+    // todo: try to make this cleaner
+    pub fn get_service_name(&self) -> String {
+        self.config.service_name.clone()
     }
 }
 
@@ -42,7 +48,6 @@ impl JigsawInstance {
 impl Jigsaw for JigsawInstance {
     #[instrument(skip_all)]
     async fn a(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        // info!("trace id: {}", get_trace_id());
         // todo: annoyingly, using the instrument attribute for the "root" instrumented call doesn't work, probably because it tries to run code before the span is created. This could probably be solved by manually creating a span using "tower" middleware in main.rs, and that may honestly be included in existing middleware for preserving trace ids from incoming requests
         Span::current().record("trace_id", get_trace_id());
         info!("Got a request: {:?}", request);
@@ -69,7 +74,7 @@ impl Jigsaw for JigsawInstance {
 
 #[derive(Deserialize, Debug)]
 struct JigsawConfig {
-    // service_name: String,
+    service_name: String,
     grpc_method_a: OptionalFunction,
     grpc_method_b: OptionalFunction,
     grpc_method_c: OptionalFunction,
@@ -81,7 +86,6 @@ struct JigsawConfig {
 struct OptionalFunction(Option<Function>);
 
 impl OptionalFunction {
-    #[instrument(name = "OptionalFunction.enact", skip(self), fields(trace_id = get_trace_id()))]
     async fn enact(&self) {
         if let Some(f) = &self.0 {
             f.enact().await;

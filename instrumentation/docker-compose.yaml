@@ -1,3 +1,5 @@
+# this was mostly copied from the official example: https://github.com/grafana/tempo/blob/main/example/docker-compose/local/docker-compose.yaml
+
 version: '3.9'
 
 # consider ditching this and just making everything use localhost with port bindings
@@ -8,44 +10,30 @@ networks:
 services:
   grafana:
     image: grafana/grafana-oss:latest
-    ports:
-      - 3000:3000
-    volumes:
-      - ./grafana:/etc/grafana/provisioning/datasources
     networks:
       - jigsaw_instrumentation
-    # logging:
-    #   driver: loki
-    #   options:
-    #     loki-url: 'http://localhost:3100/loki/api/v1/push'
+    ports:
+      - 3000:3000 # default grafana port
+    volumes:
+      - ./grafana:/etc/grafana/provisioning/datasources
 
   loki:
     image: grafana/loki:2.5.0
+    networks:
+      - jigsaw_instrumentation
     ports:
-      - 3100:3100
+      - 3100:3100 # default loki port
     volumes:
       - ./loki:/etc/loki
     command: -config.file=/etc/loki/config.yaml
-    networks:
-      - jigsaw_instrumentation
 
   tempo:
     image: grafana/tempo:latest
-    volumes:
-      - ./tempo:/etc/tempo
-      # - ./tempo-data:/tmp/tempo
-    command: -config.file=/etc/tempo/config.yaml
     networks:
       - jigsaw_instrumentation
-    # I don't need all of these, but I'm going to be experimenting for a bit at first before I can reduce them
     ports:
-      - "14268:14268"  # jaeger ingest
-      - "3200:3200"   # tempo
-      - "4317:4317"  # otlp grpc
-      - "4318:4318"  # otlp http
-      - "9411:9411"   # zipkin
-      - "9095:9095"   # default tempo grpc ???
-    # logging:
-    #   driver: loki
-    #   options:
-    #     loki-url: 'http://localhost:3100/loki/api/v1/push'
+      - 3200:3200  # default tempo port (seems to be for queries)
+      - 4317:4317  # default otlp grpc port (seems to be for ingestion)
+    volumes:
+      - ./tempo:/etc/tempo
+    command: -config.file=/etc/tempo/config.yaml

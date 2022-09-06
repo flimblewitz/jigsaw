@@ -24,6 +24,12 @@ For instance, you could have two jigsaw instances where one plays the role of a 
 For the sake of flexing your instrumentation's muscles by making jigsaw scenarios look more realistic, you can also configure actions to happen concurrently and with arbitrary levels of nested functions.
 
 The configuration spec is defined by the types in [the jigsaw_instance.rs file](/src/jigsaw_instance.rs). You must supply your configuration as json via the `CONFIG_JSON` environment variable, and it will be deserialized by `serde` into those types.
+
+# Why is every span named something generic like "Function.enact" or "Action.enact" instead of using the names for functions and actions I entered in my config?
+It's a limitation of the `tracing` crate: it needs to use a hardcoded string (`&'static str`) for span names. There's no getting around it; span names just can't be dynamic.
+
+But your custom names are still on the spans, they're just attributes/tags instead, so you'll have to click a bit more to see them (sorry).
+
 # Is this done?
 Nope.
 

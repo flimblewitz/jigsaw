@@ -18,7 +18,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3.24"
 opentelemetry-otlp = "0.10.0"
-# opentelemetry-otlp = { version = "0.10.0", features = ["http-proto"] }
 tracing-opentelemetry = "0.17.4"
 opentelemetry = "0.17.0"
 tracing-loki = "0.2.1"
