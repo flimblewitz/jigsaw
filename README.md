@@ -34,7 +34,6 @@ However, your custom names are still on the spans! They're just attributes with 
 Nope.
 
 Todo:
-- preserve/propagate trace id across services
 - timeouts for the service call action
 - retries for actions
 - chaos (chance of failure) for actions
