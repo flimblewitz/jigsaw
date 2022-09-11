@@ -3,39 +3,42 @@ use tonic::{Request, Response, Status};
 mod tonic_jigsaw {
     tonic::include_proto!("jigsaw");
 }
-use opentelemetry::global;
-use opentelemetry::propagation::Injector;
+use opentelemetry::{global::get_text_map_propagator, propagation::Injector};
 use serde::Deserialize;
 use tokio::time::{sleep_until, Duration, Instant};
-use tonic_jigsaw::jigsaw_client::JigsawClient;
-use tonic_jigsaw::jigsaw_server::{Jigsaw, JigsawServer};
-use tonic_jigsaw::Nothing;
+use tonic_jigsaw::{
+    jigsaw_client::JigsawClient,
+    jigsaw_server::{Jigsaw, JigsawServer},
+    Nothing,
+};
 use tracing::{info, instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::get_trace_id::get_trace_id;
 
-struct MetadataMap<'a>(&'a mut tonic::metadata::MetadataMap);
+struct TonicMetadataMap<'a>(&'a mut tonic::metadata::MetadataMap);
 
-impl<'a> Injector for MetadataMap<'a> {
-    /// Set a key and value in the MetadataMap.  Does nothing if the key or value are not valid inputs
+impl<'a> Injector for TonicMetadataMap<'a> {
     fn set(&mut self, key: &str, value: String) {
         if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key.as_bytes()) {
-            if let Ok(val) = tonic::metadata::MetadataValue::from_str(&value) {
+            if let Ok(val) = tonic::metadata::MetadataValue::try_from(&value) {
                 self.0.insert(key, val);
             }
         }
     }
 }
 
+#[derive(Deserialize, Debug)]
 pub struct JigsawInstance {
-    config: JigsawConfig,
+    service_name: String,
+    grpc_method_a: OptionalFunction,
+    grpc_method_b: OptionalFunction,
+    grpc_method_c: OptionalFunction,
 }
 
 impl JigsawInstance {
     pub fn new(config_json: &str) -> Self {
-        let config: JigsawConfig = serde_json::from_str(config_json).unwrap();
-        Self { config }
+        serde_json::from_str(config_json).unwrap()
     }
 
     // todo: try to make this cleaner
@@ -51,9 +54,8 @@ impl JigsawInstance {
         JigsawServer::new(self)
     }
 
-    // todo: try to make this cleaner
     pub fn get_service_name(&self) -> String {
-        self.config.service_name.clone()
+        self.service_name.clone()
     }
 }
 
@@ -61,27 +63,19 @@ impl JigsawInstance {
 impl Jigsaw for JigsawInstance {
     #[instrument(skip_all)]
     async fn a(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        self.config.grpc_method_a.enact().await;
+        self.grpc_method_a.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
     async fn b(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        self.config.grpc_method_b.enact().await;
+        self.grpc_method_b.enact().await;
         Ok(Response::new(Nothing {}))
     }
     #[instrument(skip_all)]
     async fn c(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
-        self.config.grpc_method_c.enact().await;
+        self.grpc_method_c.enact().await;
         Ok(Response::new(Nothing {}))
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct JigsawConfig {
-    service_name: String,
-    grpc_method_a: OptionalFunction,
-    grpc_method_b: OptionalFunction,
-    grpc_method_c: OptionalFunction,
 }
 
 // I don't want to copy and paste this `if let` for each grpc method, hence the following impl
@@ -164,10 +158,6 @@ impl Action {
     }
 }
 
-// this is a triumphant confluence of the tonic, opentelemetry, tracing, and tracing_opentelemetry crates
-// it mirrors what main.rs is doing, except now we're propagating trace context via an outbound request instead of capturing it from an inbound request
-// tracing_opentelemetry gives us an extension trait with a tracing::Span::context method that creates an opentelemetry::Context from a tracing::Span
-// opentelemetry gives us the global::get_text_map_propagator function, which is what actually what facilitates the propagation of the trace context via the outbound request
 #[instrument(fields(trace_id = get_trace_id()))]
 async fn issue_grpc_request(service_address: &str, service_port: &str, grpc_method: &GrpcMethod) {
     info!("starting");
@@ -178,11 +168,10 @@ async fn issue_grpc_request(service_address: &str, service_port: &str, grpc_meth
 
     let mut request = tonic::Request::new(Nothing {});
 
+    // this mirrors what main.rs does to propagate trace context from inbound requests: here, we're simply propagating trace context to outbound requests instead
     let otel_context = tracing::Span::current().context();
-
-    let mut request_metadata = MetadataMap(request.metadata_mut());
-
-    global::get_text_map_propagator(|propagator| {
+    let mut request_metadata = TonicMetadataMap(request.metadata_mut());
+    get_text_map_propagator(|propagator| {
         propagator.inject_context(&otel_context, &mut request_metadata)
     });
 

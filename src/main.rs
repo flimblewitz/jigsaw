@@ -1,6 +1,6 @@
 use http;
 use opentelemetry::{
-    global,
+    global::set_text_map_propagator,
     propagation::{Extractor, TextMapPropagator},
     sdk::{propagation::TraceContextPropagator, trace, trace::IdGenerator, Resource},
     KeyValue,
@@ -40,13 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{port}").parse()?;
 
     Server::builder()
+        // tonic gives us this the trace_fn() method to initiate a span in a custom way for each inbound request. We'll use it to facilitate trace context propagation
         .trace_fn(|request| {
-            // this is a triumphant confluence of the tonic, opentelemetry, tracing, and tracing_opentelemetry crates
-            // tonic gives us this the trace_fn() method to initiate a span in a custom way for each inbound request
-            // opentelemetry gives us the trace context propagation tools for preserving trace context across requests (for both inbound and outbound requests), though we do have to do some legwork of our own. In this case, that means implementing opentelemetry::propagation::Extractor for the request headers since they are the medium by which trace context is propagated. The official example for tonic actually draws the trace context from individual tonic requests' metadata (which is simply derived from the headers), but that's not as conveniently generic as this implementation since it has to be duplicated for each individual type of tonic request that you want to instrument
-            // tracing gives us a way to create spans that we can easily log and export
-            // tracing_opentelemetry gives us an extension trait with a tracing::Span::set_parent method that sets a tracing::Span's parent to an opentelemetry::Context, allowing us to preserve the inbound request's trace context in all forthcoming spans
-            // and though it's not obvious, if there's no trace context in the inbound request, we'll automatically get a new random trace id for a new root span instead
+            // opentelemetry requires us to do some legwork of our own to perform trace context propagation
+            // in this case, that means implementing opentelemetry::propagation::Extractor for the request headers since they are the medium by which trace context is propagated
+            // opentelemetry's official example for tonic actually extracts the trace context from individual tonic requests' metadata (which is simply derived from the headers), but that's not as conveniently generic as this implementation since it has to be duplicated for each individual type of tonic request that you want to instrument
 
             let carrier = HeaderMap(request.headers());
 
@@ -56,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let span = tracing::span!(tracing::Level::INFO, "request received");
 
+            // though it's not obvious, if there's no trace context in the inbound request, we'll end up automatically getting a new random trace id so that this span can be a new root span
             span.set_parent(parent_context.clone());
 
             span
@@ -68,28 +67,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn install_tracing(service_name: String) {
-    // this enables us to later access the opentelemetry global text map propagator whenever we want to make an outgoing request to another microservice and propagate trace context to them
-    global::set_text_map_propagator(TraceContextPropagator::new());
+    // opentelemetry requires us to do this in order to later be able to propagate trace context via outbound requests
+    set_text_map_propagator(TraceContextPropagator::new());
 
     let tempo_otlp_exporter = opentelemetry_otlp::new_exporter()
         .tonic()
         // I have to use this because tempo expects otlp-style interactions on this port
         .with_endpoint("http://localhost:4317");
-
     let tempo_otlp_tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(tempo_otlp_exporter)
         .with_trace_config(
             trace::config()
-                .with_id_generator(IdGenerator::default()) // this is unnecessary to specify, but I include it here as a reminder that apparently this tracer is what actually chooses the trace ids as they show up everywhere else
+                // this use of with_id_generator is unnecessary to specify because it's default behavior, but I include it here as a reminder that apparently this tracer is what actually generates new span ids
+                .with_id_generator(IdGenerator::default())
                 .with_resource(Resource::new(vec![KeyValue::new(
                     "service.name",
                     service_name.clone(),
                 )])),
         )
+        // although install_simple gets the job done, "real" APIs ought to use install_batch instead for better performance
         .install_simple()
         .unwrap();
-
     let tempo_otlp_layer = tracing_opentelemetry::layer().with_tracer(tempo_otlp_tracer);
 
     let stdout_log_layer = tracing_subscriber::fmt::layer().pretty();
@@ -98,7 +97,8 @@ fn install_tracing(service_name: String) {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
-    // note: this crate is automatically adding "level" as a label, which is undesired and fixed in an unreleased version
+    // unfortunately, this crate is automatically adding "level" as a label, which is bad practice for loki
+    // it's fixed in an unreleased version of the crate
     let (loki_layer, loki_layer_task) = tracing_loki::layer(
         Url::parse("http://localhost:3100").unwrap(),
         vec![("service_name".into(), service_name)]
@@ -107,7 +107,7 @@ fn install_tracing(service_name: String) {
         vec![].into_iter().collect(),
     )
     .unwrap();
-    // this appears to be analogous to the "install" step for the otlp exporter. It can use a simple exporter that performs an export immediately whenever relevant, or it can use a batch exporter to do it in the background, which I assume is what this "task" is doing
+    // this appears to be analogous to the "install" step for tempo_otlp_tracer
     tokio::spawn(loki_layer_task);
 
     let collector = Registry::default()
