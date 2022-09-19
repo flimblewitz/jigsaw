@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_json = env::var("CONFIG_JSON")?;
     let jigsaw_instance = JigsawInstance::new(&config_json);
 
-    install_tracing(jigsaw_instance.get_service_name());
+    install_tracing(jigsaw_instance.service_name());
 
     let port = env::var("PORT").unwrap_or("6379".into());
     let addr = format!("127.0.0.1:{port}").parse()?;

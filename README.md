@@ -1,5 +1,5 @@
 # What is this?
-Jigsaw is an `instrumented` `configurable` `mock` `GRPC` API that emits tracing information. It's only capable of issuing requests to other instances of itself.
+Jigsaw is an `instrumented` `configurable` `mock` GRPC API that can issue requests to other instances of itself.
 
 # What is it for?
 The idea is to use it as a building block when testing observability backends and microservice infrastructure.
@@ -42,6 +42,16 @@ For the sake of flexing your instrumentation's muscles by making Jigsaw scenario
 
 The configuration specification is defined by the types in [the jigsaw_instance.rs file](/src/jigsaw_instance.rs). You must supply your configuration as JSON via the `CONFIG_JSON` environment variable, and it will be deserialized by the `serde` crate into those types.
 
+## Can it be configured to fail sometimes?
+Yes! While testing out happy paths with distributed tracing is well and good, for a more complete experience, you probably ought to see what happens if errors occur. Jigsaw's configuration has a `failure_chance` property that you can optionally include for those sleep actions mentioned previously.
+
+### But what does it actually do when it fails?
+Without tracing, I would personally generally handle the logging of every kind of unexpected error by logging it exactly one time with a stack trace at the **highest possible level** - _the place where you truly handle the error in the code by mapping it to some sort of designated response/return value_ - and wrapping that error log in whatever context might be necessary to understand how it relates to that **highest possible level** for the sake of legibility in both the code and the app logs.
+
+However, tracing turns this sort of flow upside down: if you emit an error event at the **lowest possible level** - _the place where it actually originates_ - then assuming you're instrumenting most/all of your functions, the log legibility will be perfectly sufficient because all the context you could ever need will simply exist in the corresponding trace, and the code legibility will actually be better because you're logging the error in the same place where it originates.
+
+In accordance with this thinking, Jigsaw simply emits an error event _immediately_ after a failure occurs and then lets the error bubble up for response handling but no further logging.
+
 ## Why are spans named something generic like "Function.enact" or "sleep" instead of the `tracing_name`s I entered in my config?
 It's a limitation of the `tracing` crate: it needs to use hardcoded strings (`&'static str`) for span names. There's no getting around it; Jigsaw can't dynamically give spans names based on your configuration, so it gives them generic names instead.
 
@@ -51,9 +61,9 @@ However, your custom names are still on the spans! They're just attributes with 
 Nope.
 
 Todo:
+- explain get_trace_id 
 - timeouts for the service call action
 - retries for actions
-- chaos (chance of failure) for actions
 - AWS ECS and ALB
 - github actions CI/CD
 - kubernetes and linkerd/traefik mesh, then again with AWS EKS
