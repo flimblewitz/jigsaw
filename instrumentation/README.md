@@ -1,35 +1,33 @@
+# What is this?
+This folder contains everything needed to start simple local instances of Grafana, Loki, and Tempo that can be used in concert with local instances of Jigsaw.
+
 # How to run
 ```
 docker compose up
 ```
 
-this gets you
-- grafana at http://localhost:3000
-- loki at http://localhost:3100
-- jaeger at http://localhost:16686
+This gets you
+- Grafana at http://localhost:3000
+- Loki at http://localhost:3100
+- Tempo at http://localhost:3200
 
-wait until loki is ready according to http://localhost:3100/ready
+# Grafana
+The default grafana login is `admin`/`admin`.
 
-steps to log into and deal with [grafana](http://localhost:3000):
-- sign in as admin/admin
-- add a data source in grafana with the url `http://loki:3100` (this resolves because of docker networking)
+The configuration is based on two [official examples](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/)
+- https://github.com/grafana/tempo/blob/main/example/docker-compose/loki
+- https://github.com/grafana/tempo/blob/main/example/docker-compose/local
+The highlights are
+- the baked-in registrations of Loki and Tempo as datasources
+- the `derivedFields` setting that links logs in the former to traces in the latter
+- the mapping of the `service_name` span attribute to `service.name` in Tempo because that's the magic keyword for service names in Tempo (spans won't be labeled nicely without it). In contrast, Loki doesn't allow periods in labels, so that's why `service_name` is the actual attribute name being used
 
-# Testing
-## Loki
-the loki setup comes from https://citizix.com/how-to-run-grafana-loki-with-docker-and-docker-compose/
+# Loki
+Wait until Loki is ready according to http://localhost:3100/ready.
 
-the official getting started example has too much going on for my interests. I wish they had broken it up into steps starting from the bare minimum with just grafana and loki running purely locally
-  https://grafana.com/docs/loki/latest/getting-started/
+The Loki config file being used is based on https://citizix.com/how-to-run-grafana-loki-with-docker-and-docker-compose/
 
-I'm not sure if this unexplained docker-compose.yaml runs defaults or not
-  https://github.com/grafana/loki/blob/main/production/docker-compose.yaml
-
-### Counterintuitive behavior
-The `loki-tracing` crate appears to be bugged in two ways:
-- it automatically adds a label for the log `level`, which is against the official best practices
-- it doesn't include the trace id on the events of the first span in a trace. I'm pretty sure it's this crate and not the `tracing` crate because tempo is able to see the events for such spans. I ended up not including placeholder events where the traces' root spans are created (the grpc methods) because it didn't seem worth worrying about
-
-### Push a trace log manually 
+## Push a trace log manually 
 https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
 ```
 curl -XPOST \
@@ -49,21 +47,8 @@ curl -XPOST \
 }' -i
 ```
 
-### Deleting logs
-This doesn't actually seem to be feasible, but it's probably worth delving deeper.
-
-https://grafana.com/docs/loki/latest/api/#request-log-deletion
-
-There's an automatic log entry deletion feature that's not documented very well.
-- https://grafana.com/docs/loki/latest/operations/storage/logs-deletion/
-- https://grafana.com/docs/loki/latest/operations/storage/retention/
-- https://grafana.com/docs/loki/latest/operations/storage/filesystem/
-
-## Tempo
-I'm basing this off of two [official examples](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/)
-- https://github.com/grafana/tempo/blob/main/example/docker-compose/loki
-- https://github.com/grafana/tempo/blob/main/example/docker-compose/local
-### Push a trace log manually
+# Tempo
+## Push a trace log manually
 https://grafana.com/docs/tempo/latest/api_docs/pushing-spans-with-http/
 ```
 curl -X POST http://localhost:9411 -H 'Content-Type: application/json' -d '[{
@@ -85,6 +70,3 @@ Check for its existence:
 ```
 curl http://localhost:3200/api/traces/0123456789abcdef -i
 ```
-
-### Metrics generation
-I disabled this, but the two example configs linked above have it enabled. It seems to require prometheus, which I didn't want to involve in this yet.
