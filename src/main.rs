@@ -70,13 +70,15 @@ fn install_tracing(service_name: String) {
     // opentelemetry requires us to do this in order to later be able to propagate trace context via outbound requests
     set_text_map_propagator(TraceContextPropagator::new());
 
-    let tempo_otlp_exporter = opentelemetry_otlp::new_exporter()
+    let otel_backend_address =
+        env::var("OTEL_BACKEND_ADDRESS").unwrap_or("http://localhost:4317".into());
+    let otlp_exporter = opentelemetry_otlp::new_exporter()
         .tonic()
         // I have to use this because tempo expects otlp-style interactions on this port
-        .with_endpoint("http://localhost:4317");
-    let tempo_otlp_tracer = opentelemetry_otlp::new_pipeline()
+        .with_endpoint(otel_backend_address);
+    let otlp_tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_exporter(tempo_otlp_exporter)
+        .with_exporter(otlp_exporter)
         .with_trace_config(
             trace::config()
                 // this use of with_id_generator is unnecessary to specify because it's default behavior, but I include it here as a reminder that apparently this tracer is what actually generates new span ids
@@ -89,7 +91,7 @@ fn install_tracing(service_name: String) {
         // although install_simple gets the job done, "real" APIs ought to use install_batch instead for better performance
         .install_simple()
         .unwrap();
-    let tempo_otlp_layer = tracing_opentelemetry::layer().with_tracer(tempo_otlp_tracer);
+    let tempo_otlp_layer = tracing_opentelemetry::layer().with_tracer(otlp_tracer);
 
     let stdout_log_layer = tracing_subscriber::fmt::layer().pretty();
 
@@ -97,24 +99,25 @@ fn install_tracing(service_name: String) {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();
 
-    // unfortunately, this crate is automatically adding "level" as a label, which is bad practice for loki
-    // it's fixed in an unreleased version of the crate
-    let (loki_layer, loki_layer_task) = tracing_loki::layer(
-        Url::parse("http://localhost:3100").unwrap(),
-        vec![("service_name".into(), service_name)]
-            .into_iter()
-            .collect(),
-        vec![].into_iter().collect(),
-    )
-    .unwrap();
-    // this appears to be analogous to the "install" step for tempo_otlp_tracer
-    tokio::spawn(loki_layer_task);
-
     let collector = Registry::default()
-        .with(loki_layer)
         .with(tempo_otlp_layer)
         .with(stdout_log_layer)
         .with(filter_layer);
 
-    tracing::subscriber::set_global_default(collector).unwrap();
+    if let Ok(loki_address) = env::var("LOKI_ADDRESS") {
+        let (loki_layer, loki_layer_task) = tracing_loki::layer(
+            Url::parse(&loki_address).unwrap(),
+            vec![("service_name".into(), service_name)]
+                .into_iter()
+                .collect(),
+            vec![].into_iter().collect(),
+        )
+        .unwrap();
+        // this appears to be analogous to the "install" step for tempo_otlp_tracer
+        tokio::spawn(loki_layer_task);
+
+        tracing::subscriber::set_global_default(collector.with(loki_layer)).unwrap();
+    } else {
+        tracing::subscriber::set_global_default(collector).unwrap();
+    }
 }

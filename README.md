@@ -1,5 +1,5 @@
 # What is this?
-Jigsaw is an `instrumented` `configurable` `mock` GRPC API that can issue requests to other instances of itself.
+Jigsaw is an `instrumented` `configurable` `mock` gRPC API that can issue requests to other instances of itself.
 
 # What is it for?
 The idea is to use it as a building block when testing observability backends and microservice infrastructures.
@@ -10,47 +10,56 @@ For instance, I want to test out Grafana Loki and Grafana Tempo as observability
 Yeah, usually. But the microservices involved are always contrived, and I find that distracting.
 
 Instead, I want to
-- make my own microservice to prove to myself that I actually understand rust, GRPC, distributed tracing, etc.
+- make my own microservice to prove to myself that I actually understand rust, gRPC, distributed tracing, etc.
 - be able to create scenarios of arbitrary shape to simulate when testing
 - not create a new codebase for each simulated microservice
 
 # What do you mean by `instrumented`?
-[OpenTelemetry distributed tracing](https://opentelemetry.io/docs/concepts/observability-primer/#understanding-distributed-tracing) information is emitted to observability backends.
+[OpenTelemetry distributed tracing](https://opentelemetry.io/docs/concepts/observability-primer/#understanding-distributed-tracing) information is emitted to observability backends. The official site explains it best, but in short, the concepts are
+- `span event`: a log
+- `span`: a "span" of time for a specific code execution of interest, including code context and any associated span events. Spans can be nested in other spans
+- `trace`: a tree of spans starting from a "root" span
 
-In other words,
-- spans are sent to [Grafana Tempo](https://grafana.com/oss/tempo/)
-- span events (**logs** that are tied to spans) are sent to [Grafana Loki](https://grafana.com/oss/loki/)
+In this repo's [instrumentation](instrumentation) folder, there are instructions to locally run two observability backends as well as a nice UI for them:
+- [Grafana](https://grafana.com/grafana/) is the UI
+- [Grafana Loki](https://grafana.com/oss/loki/) lets you search your span events
+- [Grafana Tempo](https://grafana.com/oss/tempo/) assembles traces
 
 ## What rust crates facilitate that?
-- `tracing` lets us create spans and span events in and around our code
-- `opentelemetry` lets us propagate distributed tracing context along inbound and outbound requests so that spans can encapsulate microservice interactions
-- `tracing_opentelemetry` lets us exchange distributed tracing context between `tracing` and `opentelemetry`
-- `tracing_subscriber` lets us actually collect spans and span events created by `tracing`. It also lets us write span events to stdout if desired
-- `opentelemetry_otlp` lets us emit collected spans and span events to an OpenTelemetry-compliant observability backend (e.g. Grafana Tempo)
-- `tracing_loki` lets us emit collected span events to Grafana Loki specifically
+- [`tracing`](https://docs.rs/tracing/latest/tracing/) lets us create spans and span events in and around our code
+- [`opentelemetry`](https://docs.rs/opentelemetry/latest/opentelemetry/) lets us propagate distributed tracing context along inbound and outbound requests so that spans can encapsulate microservice interactions
+- [`tracing_opentelemetry`](https://docs.rs/tracing-opentelemetry/latest/tracing_opentelemetry/) lets us exchange distributed tracing context between `tracing` and `opentelemetry`
+- [`tracing_subscriber`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/index.html) lets us actually collect spans and span events created by `tracing`. It also lets us write span events to stdout if desired
+- [`opentelemetry_otlp`](https://docs.rs/opentelemetry-otlp/latest/opentelemetry_otlp/) lets us emit collected spans and span events to an OpenTelemetry-compliant observability backend (e.g. Grafana Tempo)
+- [`tracing_loki`](https://docs.rs/tracing-loki/latest/tracing_loki/) lets us emit collected span events to Grafana Loki specifically
 
 ### Among those rust crates and their interactions, are there any quirks worth noting?
 Yeah.
-- in order to associate each individual span with its overarching trace, I had to make [a `get_trace_id` helper function to get the current span's trace id](src/get_trace_id.rs) and then explicitly instrument every function with its output, e.g. `#[instrument(fields(trace_id = get_trace_id()))]`
+- in order to associate each individual span with its trace, I had to make a [`get_trace_id`](src/get_trace_id.rs) helper function and explicitly instrument every function with its output
 - `tracing_loki` automatically adds a label for the log `level`, which is against the official best practices for Grafana Loki
 
 # What do you mean by `configurable` and `mock`?
-Jigsaw has 3 (number subject to change) unary GRPC methods literally named `A`, `B`, and `C` that do nothing by default and [use an empty GRPC message as input and output](proto/jigsaw.proto).
+Jigsaw has 3 (number subject to change) unary gRPC methods literally named `A`, `B`, and `C` that do nothing by default and [use an empty gRPC message as input and output](proto/jigsaw.proto).
 
 I say that it's `configurable` because you can define logic to simulate inside each of those methods, and Jigsaw will enact that logic when the method is invoked as well as emit corresponding spans and span events.
 
-I say that it's a `mock` API because it doesn't ultimately do anything other than either sleep or invoke a GRPC method in another Jigsaw instance. The sleep operations are loosely intended to simulate I/O but could also represent something less atomic: it's all up to your imagination.
+I say that it's a `mock` API because it doesn't ultimately do anything other than either sleep or invoke a gRPC method in another Jigsaw instance. The sleep operations are loosely intended to simulate I/O but could also represent something less atomic: it's all up to your imagination.
 
-For instance, you could have two Jigsaw instances where one plays the role of a consumer-facing api and another plays the role of a database, and you could configure one of the GRPC methods of the latter to sleep for a long time to simulate an expensive read/write query. Alternatively, you could have just the one Jigsaw instance playing the role of the consumer-facing api and configure one of its GRPC methods to have a sleep that simulates both the act of sending a request to a database _and_ the database performing the query itself. Whatever floats your boat.
+For instance, you could have two Jigsaw instances where one plays the role of a consumer-facing api and another plays the role of a database, and you could configure one of the gRPC methods of the latter to sleep for a long time to simulate an expensive read/write query. Alternatively, you could have just the one Jigsaw instance playing the role of the consumer-facing api and configure one of its gRPC methods to have a sleep that simulates both the act of sending a request to a database _and_ the database performing the query itself. Whatever floats your boat.
 
 For the sake of flexing your instrumentation's muscles by making Jigsaw scenarios look more realistic, you can also configure actions to happen concurrently and with arbitrary levels of nested functions.
 
-The configuration specification is defined by the types in [the jigsaw_instance.rs file](/src/jigsaw_instance.rs). You must supply your configuration as JSON via the `CONFIG_JSON` environment variable, and it will be deserialized by the `serde` crate into those types. There are examples in [the example_configs folder](example_configs).
+## How do I configure it?
+Use the following environment variables:
+- `PORT`: the port Jigsaw runs on
+- `CONFIG_JSON`: this defines the behavior for Jigsaw's three gRPC methods. The specification is defined by the types in [the jigsaw_instance.rs file](/src/jigsaw_instance.rs). There are examples in [the example_configs folder](example_configs)
+- `OTEL_BACKEND_ADDRESS`: this defines the gRPC address of the OpenTelemetry backend (e.g. Tempo) to which your Jigsaw instance should send its spans and span events. The default value is `http://localhost:4317`
+- `LOKI_ADDRESS`: if you want Jigsaw to send span events directly to a Loki instance, fill this in. Example: `http://localhost:3200`
 
 ## Can it be configured to fail sometimes?
 Yes! While testing out happy paths with distributed tracing is well and good, for a more complete experience, you probably ought to see what happens if errors occur. Jigsaw's configuration has a `failure_chance` property that you can optionally include for those sleep actions mentioned previously.
 
-If you get a "low roll" for any sleep action in a GRPC method, the GRPC request will result in a response with the `INTERNAL` code (representing an internal error) instead of `OK`.
+If you get a "low roll" for any sleep action in a gRPC method, the gRPC request will result in a response with the `INTERNAL` code (representing an internal error) instead of `OK`.
 
 ### How are error logs (span events) handled?
 _Without_ tracing, I would personally generally deal with an unexpected error by logging it at the **highest possible level** - _the place where you truly handle the error by mapping it to some sort of designated response/return value_. But for the error log to make sense, I would include
@@ -90,7 +99,7 @@ The `tonic-build` build dependency uses the `prost` crate, which requires [`prot
 ## How to test locally
 If you're using vscode, there are [launch configs](.vscode/launch.json) that you can use to kick off debugging sessions.
 
-To issue GRPC requests, [`grpcurl`](https://github.com/fullstorydev/grpcurl) is pretty simple. For example:
+To issue gRPC requests, [`grpcurl`](https://github.com/fullstorydev/grpcurl) is pretty simple. For example:
 ```
 ./grpcurl -plaintext -proto ./proto/jigsaw.proto -import-path ./proto localhost:6379 jigsaw.Jigsaw/A
 ```

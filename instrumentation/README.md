@@ -9,7 +9,7 @@ docker compose up
 This gets you
 - Grafana at http://localhost:3000
 - Loki at http://localhost:3100
-- Tempo at http://localhost:3200
+- Tempo at http://localhost:3200 (and http://localhost:4317 for ingestion)
 
 # Grafana
 The default grafana login is `admin`/`admin`.
