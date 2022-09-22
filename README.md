@@ -62,7 +62,7 @@ Yes! While testing out happy paths with distributed tracing is well and good, fo
 If you get a "low roll" for any sleep action in a gRPC method, the gRPC request will result in a response with the `INTERNAL` code (representing an internal error) instead of `OK`.
 
 ### How are error logs (span events) handled?
-_Without_ tracing, I would personally generally deal with an unexpected error by logging it at the **highest possible level** - _the place where you truly handle the error by mapping it to some sort of designated response/return value_. But for the error log to make sense, I would include
+_Without_ tracing, I would personally generally deal with an unexpected error by logging it at the **highest possible level** - _the place where you ultimately map the error to some sort of response/return value_ - along with
 - a stack trace
 - relevant high-level context
 
@@ -70,7 +70,7 @@ _With_ tracing, assuming you're instrumenting most/all of your functions, it act
 - a "span trace" (analogous to a stack trace)
 - all the context you allowed to be included in each span
 
-In accordance with this thinking, Jigsaw emits an error event _immediately_ after any failure occurs and then lets the error bubble up for response handling but no further logging.
+In accordance with this thinking, Jigsaw emits an error span event _immediately_ after any failure occurs and then lets the error bubble up for response handling but no further logging.
 
 ## Why are spans named something generic like "Function.enact" or "sleep" instead of the `tracing_name`s I entered in my config?
 It's a limitation of the `tracing` crate: it needs to use hardcoded strings (`&'static str`) for span names. There's no getting around it; Jigsaw can't dynamically give spans names based on your configuration, so it gives them generic names instead.
