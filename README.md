@@ -11,7 +11,7 @@ You can also use it as a seed project (a sort of template or starting point from
 # But aren't there already sample microservices in tutorials for those things?
 Yeah, usually. But the microservices involved are always very contrived, and I find that distracting. Rather than having to scrutinize one or more very particular or whimsical sample microservice, I would prefer be able to play with something minimal that has _nothing tangible going on_ and the ability to be freely instantiated with configurable "pretend" behavior that can be whatever I want it to be.
 
-In addition to being an opportunity to get hands-on, Jigsaw is motivated by the desires to
+Jigsaw is motivated by the desires to
 - be able to simulate microservice ecosystems and interactions of arbitrary shape
 - not have to create or understand a new codebase for each simulated microservice
 
@@ -80,16 +80,12 @@ However, **your custom names are still on the spans**! They're just attributes w
 
 # Is this done?
 The most important parts for instrumentation are done, so it's sufficient for local use. CI/CD for microservice architectures are still in the pipeline.
-
-Done:
-- [x] add configurable chaos (`failure_chance`)
-- [x] preserve/propagate trace id across services
-- [x] emit tracing information
-- [x] create docker-compose.yaml for Grafana, Loki, and Tempo
-- [x] issue gRPC requests to other Jigsaw instances
 - [x] ingest the config from an environment variable
-
-Todo:
+- [x] issue gRPC requests to other Jigsaw instances
+- [x] create docker-compose.yaml for Grafana, Loki, and Tempo
+- [x] emit tracing information
+- [x] preserve/propagate trace id across services
+- [x] configurable chaos (`failure_chance`)
 - [ ] configurable timeouts for the service call action
 - [ ] configurable retries for actions
 - [ ] rename it from `jigsaw` to `thespian` because it seems like a better name in every regard
