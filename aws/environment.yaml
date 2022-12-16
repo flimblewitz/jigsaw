@@ -1,0 +1,470 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: > 
+  This cloudformation stack contains resources intended to serve as the "groundwork" for ECS services.
+  Note that it uses only 2 AZs, which is the bare minimum required to be able to use an ALB.
+  Also note that the ALBSecurityGroup only allows HTTP traffic from the outside world because setting up a certificate in ACM is just more work to do.
+
+Parameters:
+  DeveloperIpAddress:
+    Type: String
+    AllowedPattern: "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}$"
+    Description: Pass in your IP address here so you can actually make requests to your ALB. This is a cheap way to not have to worry about setting up HTTPS for your ECS services.
+  SubnetCount:
+    Type: Number
+    MinValue: 4
+    Default: 4
+    MaxValue: 4
+    # we're using an ALB to make APIs in private subnets accessible. For that to work, each private subnet needs a corresponding public subnet in which the ALB can exist. ALBs need at least 2 public subnets, so we're going with 2 public + 2 private = 4 subnets total  
+    Description: Don't pass in a value for this; the default is intentionally calculated based on fixed resources in this template. It's only a parameter because a parameter provides an easy way to not have to copy and paste a value.
+  SubnetMaskSize:
+    Type: Number
+    MinValue: 14
+    Default: 14
+    MaxValue: 14
+    # given 4 subnets and a VPC CIDR of 2^16 IPs, the number of IPs that can fit in 4 evenly spread subnets is 2^14
+    Description: Don't pass in a value for this; the default is intentionally calculated based on fixed resources in this template. It's only a parameter because a parameter provides an easy way to not have to copy and paste a value.
+
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  VPCInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  VPCInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref VPCInternetGateway
+      VpcId: !Ref VPC
+
+  VPCNetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  VPCNetworkACLEntryGlobalIngress:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: false
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 300
+
+  VPCNetworkACLEntryGlobalEgress:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 301
+
+  # To have ecs services running in private subnets and use an ALB to provide public access to them, you must make corresponding public subnets for each private subnet AZ. The ALB will exist in these public subnets and requires 8 IP addresses per public subnet. I'm just going to make the public subnets as big as the private subnets for now to make it a little less of a hassle to compose everything 
+  # https://aws.amazon.com/premiumsupport/knowledge-center/public-load-balancer-private-ec2/
+  # TODO: factor out these subnets and associated resources into their own cloudformation template so that they don't have to be painfully duplicated here
+
+  ####################################################################
+  #### Public and Private Subnet 1
+  ####################################################################
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+      VpcId: !Ref VPC
+
+  PublicSubnet1AclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref VPCNetworkACL
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+
+  PublicSubnet1InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VPCInternetGateway
+      RouteTableId: !Ref PublicSubnet1RouteTable
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicSubnet1RouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet1NATElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  PublicSubnet1NAT:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt PublicSubnet1NATElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Private Subnet 1'
+      VpcId: !Ref VPC
+
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Private Subnet 1'
+
+  PrivateSubnet1NATRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref PublicSubnet1NAT
+      RouteTableId: !Ref PrivateSubnet1RouteTable
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateSubnet1RouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnet1AclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref VPCNetworkACL
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnet1AclIngressEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Egress: false
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+
+  PrivateSubnet1AclEgressEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Egress: true
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 101
+
+  ####################################################################
+  #### Public and Private Subnet 2
+  ####################################################################
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+      VpcId: !Ref VPC
+
+  PublicSubnet2AclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref VPCNetworkACL
+      SubnetId: !Ref PublicSubnet2
+
+  PublicSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+
+  PublicSubnet2InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VPCInternetGateway
+      RouteTableId: !Ref PublicSubnet2RouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicSubnet2RouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PublicSubnet2NATElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  PublicSubnet2NAT:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt PublicSubnet2NATElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Public Subnet 1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Private Subnet 2'
+      VpcId: !Ref VPC
+
+  PrivateSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Private Subnet 2'
+
+  PrivateSubnet2NATRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref PublicSubnet2NAT
+      RouteTableId: !Ref PrivateSubnet2RouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateSubnet2RouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateSubnet2AclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref VPCNetworkACL
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateSubnet2AclIngressEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Egress: false
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+
+  PrivateSubnet2AclEgressEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+      Egress: true
+      NetworkAclId: !Ref VPCNetworkACL
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 101
+
+  ####################################################################
+  ####################################################################
+  ####################################################################
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref AWS::StackName
+
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MaxSize: 1
+      MinSize: 1
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData: 
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html#dynamic-references-ssm
+        # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-optimized_AMI.html
+        ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id}}'
+        InstanceType: t4g.nano
+        SecurityGroupIds:
+          - !Ref ECSSecurityGroup
+        # in the absence of other special configurations, this seems to be all we need to bootstrap the ECS container agent
+        # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bootstrap_container_instance.html#bootstrap_container_agent
+        UserData: !Base64
+          Fn::Sub: "#!/bin/bash\necho ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config"
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Ref AWS::StackName
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: -1
+          IpProtocol: '-1'
+          ToPort: -1
+      SecurityGroupIngress:
+        - Description: http traffic from ALB
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - Description: https traffic from ALB
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - Description: ECS port traffic from ALB (needed for ELB Target Group health checks)
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          IpProtocol: tcp
+          FromPort: 32768
+          ToPort: 65535
+        # TODO: confirm the following are actually necessary
+        # - Description: ECS port traffic from private subnet 1
+        #   CidrIp: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+        #   FromPort: 32768
+        #   IpProtocol: tcp
+        #   ToPort: 65535
+        # - Description: ECS port traffic from private subnet 2
+        #   CidrIp: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
+        #   FromPort: 32768
+        #   IpProtocol: tcp
+        #   ToPort: 65535
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      VpcId: !Ref VPC
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceProfileRole
+
+  EC2InstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        # enables SSM session manager (I think the session manager functionality is already installed on ECS-optimized AMIs?)
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      GroupDescription: !Ref AWS::StackName
+      SecurityGroupEgress:
+        - Description: all traffic
+          CidrIp: 0.0.0.0/0
+          IpProtocol: '-1'
+          FromPort: -1
+          ToPort: -1
+      SecurityGroupIngress:
+        - Description: http traffic from you and nobody else
+          CidrIp: !Sub '${DeveloperIpAddress}/32'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        # TODO: confirm the following is actually necessary
+        # - Description: traffic between ECS services
+        #   CidrIp: !GetAtt VPC.CidrBlock
+        #   IpProtocol: tcp
+        #   FromPort: 32768
+        #   ToPort: 65535
+      VpcId: !Ref VPC
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref AWS::StackName
+      Type: application
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: 'could not find an ALB action that matches your request'
+            StatusCode: '503'
+          Type: fixed-response
