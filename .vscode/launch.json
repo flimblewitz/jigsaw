@@ -7,15 +7,15 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'jigsaw-server' with 'standalone' example config",
+      "name": "Debug executable 'thespian-server' with 'standalone' example config",
       "cargo": {
         "args": [
           "build",
-          "--bin=jigsaw-server",
-          "--package=jigsaw"
+          "--bin=thespian-server",
+          "--package=thespian"
         ],
         "filter": {
-          "name": "jigsaw-server",
+          "name": "thespian-server",
           "kind": "bin"
         }
       },
@@ -30,15 +30,15 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'jigsaw-server' with 'call_service' example config",
+      "name": "Debug executable 'thespian-server' with 'call_service' example config",
       "cargo": {
         "args": [
           "build",
-          "--bin=jigsaw-server",
-          "--package=jigsaw"
+          "--bin=thespian-server",
+          "--package=thespian"
         ],
         "filter": {
-          "name": "jigsaw-server",
+          "name": "thespian-server",
           "kind": "bin"
         }
       },
@@ -53,16 +53,16 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'jigsaw-server'",
+      "name": "Debug unit tests in executable 'thespian-server'",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "--bin=jigsaw-server",
-          "--package=jigsaw"
+          "--bin=thespian-server",
+          "--package=thespian"
         ],
         "filter": {
-          "name": "jigsaw-server",
+          "name": "thespian-server",
           "kind": "bin"
         }
       },

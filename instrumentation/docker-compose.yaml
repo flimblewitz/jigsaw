@@ -3,15 +3,15 @@
 version: '3.9'
 
 # consider ditching this and just making everything use localhost with port bindings
-# I'm already binding to localhost so I can run jigsaw locally and debug quickly
+# I'm already binding to localhost so I can run thespian locally and debug quickly
 networks:
-  jigsaw_instrumentation:
+  thespian_instrumentation:
 
 services:
   grafana:
     image: grafana/grafana-oss:latest
     networks:
-      - jigsaw_instrumentation
+      - thespian_instrumentation
     ports:
       - 3000:3000 # default grafana port
     volumes:
@@ -20,7 +20,7 @@ services:
   loki:
     image: grafana/loki:2.5.0
     networks:
-      - jigsaw_instrumentation
+      - thespian_instrumentation
     ports:
       - 3100:3100 # default loki port
     volumes:
@@ -30,7 +30,7 @@ services:
   tempo:
     image: grafana/tempo:latest
     networks:
-      - jigsaw_instrumentation
+      - thespian_instrumentation
     ports:
       - 3200:3200  # default tempo port (seems to be for queries)
       - 4317:4317  # default otlp grpc port (seems to be for ingestion)

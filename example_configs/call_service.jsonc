@@ -1,4 +1,4 @@
-// this represents a jigsaw that calls the grpc "A" method of another jigsaw running on 127.0.0.1:6379
+// this represents a thespian that calls the grpc "A" method of another thespian running on 127.0.0.1:6379
 // minified: "{\"service_name\":\"rob_playing_starfox\",\"grpc_method_a\":{\"tracing_name\":\"engage 'fun' subroutine\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"wiggle clamp hands in anticipation\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"excitedly crank more power into LED eyes\",\"duration_ms\":2000}},{\"CallService\":{\"tracing_name\":\"interface with starfox game\",\"service_address\":\"http://127.0.0.1\",\"service_port\":\"6379\",\"grpc_method\":\"A\"}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"spin torso 180 degrees and pat self on back\",\"duration_ms\":1000}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}"
 {
   "service_name": "rob_playing_starfox",

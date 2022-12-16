@@ -1,5 +1,5 @@
 # What is this?
-This folder contains everything needed to start simple local instances of Grafana, Loki, and Tempo that can be used in concert with local instances of Jigsaw.
+This folder contains everything needed to start simple local instances of Grafana, Loki, and Tempo that can be used in concert with local instances of Thespian.
 
 # How to run
 ```

@@ -14,8 +14,8 @@ use url::Url;
 
 // rust requires that we explicitly define module hierarchy in code, and main.rs defines the crate (root) module. It's analogous to a hypothetical foo.rs module file and its optional sibling foo/ folder containing submodules
 mod get_trace_id;
-mod jigsaw_instance;
-use jigsaw_instance::JigsawInstance;
+mod thespian_instance;
+use thespian_instance::ThespianInstance;
 
 struct HeaderMap<'a>(&'a http::HeaderMap);
 
@@ -28,13 +28,13 @@ impl<'a> Extractor for HeaderMap<'a> {
     }
 }
 
-// the current_thread flavor of tokio is being used because it doesn't seem to matter for something as lightweight and hollow as jigsaw
+// the current_thread flavor of tokio is being used because it doesn't seem to matter for something as lightweight and hollow as thespian
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_json = env::var("CONFIG_JSON")?;
-    let jigsaw_instance = JigsawInstance::new(&config_json);
+    let thespian_instance = ThespianInstance::new(&config_json);
 
-    install_tracing(jigsaw_instance.service_name());
+    install_tracing(thespian_instance.service_name());
 
     let port = env::var("PORT").unwrap_or("6379".into());
     let addr = format!("127.0.0.1:{port}").parse()?;
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             span
         })
-        .add_service(jigsaw_instance.as_server())
+        .add_service(thespian_instance.as_server())
         .serve(addr)
         .await?;
 

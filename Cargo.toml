@@ -1,10 +1,10 @@
 [package]
-name = "jigsaw"
+name = "thespian"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "jigsaw-server"
+name = "thespian-server"
 path = "src/main.rs"
 
 [dependencies]

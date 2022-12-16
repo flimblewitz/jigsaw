@@ -1,15 +1,15 @@
 use async_recursion::async_recursion;
 use tonic::{Request, Response, Status};
-mod tonic_jigsaw {
-    tonic::include_proto!("jigsaw");
+mod tonic_thespian {
+    tonic::include_proto!("thespian");
 }
 use opentelemetry::{global::get_text_map_propagator, propagation::Injector};
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use tokio::time::{sleep_until, Duration, Instant};
-use tonic_jigsaw::{
-    jigsaw_client::JigsawClient,
-    jigsaw_server::{Jigsaw, JigsawServer},
+use tonic_thespian::{
+    thespian_client::ThespianClient,
+    thespian_server::{Thespian, ThespianServer},
     Nothing,
 };
 use tracing::{error, info, instrument};
@@ -17,7 +17,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::get_trace_id::get_trace_id;
 
-type JigsawResult = Result<(), String>;
+type ThespianResult = Result<(), String>;
 
 struct TonicMetadataMap<'a>(&'a mut tonic::metadata::MetadataMap);
 
@@ -32,29 +32,29 @@ impl<'a> Injector for TonicMetadataMap<'a> {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct JigsawInstance {
+pub struct ThespianInstance {
     service_name: String,
     grpc_method_a: OptionalFunction,
     grpc_method_b: OptionalFunction,
     grpc_method_c: OptionalFunction,
 }
 
-impl JigsawInstance {
+impl ThespianInstance {
     pub fn new(config_json: &str) -> Self {
         serde_json::from_str(config_json).unwrap()
     }
 
     // todo: try to make this cleaner
-    // other modules (like main) can't easily recognize the same tonic-built types (contained in the "tonic_jigsaw" module defined at the top of this file)
-    // there is a way, but it's intrusive. You have to make the tonic_jigsaw module public and then use the following two lines in other modules:
+    // other modules (like main) can't easily recognize the same tonic-built types (contained in the "tonic_thespian" module defined at the top of this file)
+    // there is a way, but it's intrusive. You have to make the tonic_thespian module public and then use the following two lines in other modules:
     /*
-        use crate::tonic_jigsaw::jigsaw_server::Jigsaw;
-        use jigsaw_instance::tonic_jigsaw;
+        use crate::tonic_thespian::thespian_server::Thespian;
+        use thespian_instance::tonic_thespian;
     */
-    // but because the only other module in question really only needs something that implements all the traits that make up a tonic "Service", and that's all neatly wrapped up for us in the generated JigsawServer type, we can just return the JigsawServer type here and be done with it
-    // todo: this is dependent on how to expose the service name, but consider making the only public function in this file one that outputs a JigsawServer
-    pub fn as_server(self) -> JigsawServer<Self> {
-        JigsawServer::new(self)
+    // but because the only other module in question really only needs something that implements all the traits that make up a tonic "Service", and that's all neatly wrapped up for us in the generated ThespianServer type, we can just return the ThespianServer type here and be done with it
+    // todo: this is dependent on how to expose the service name, but consider making the only public function in this file one that outputs a ThespianServer
+    pub fn as_server(self) -> ThespianServer<Self> {
+        ThespianServer::new(self)
     }
 
     pub fn service_name(&self) -> String {
@@ -63,7 +63,7 @@ impl JigsawInstance {
 }
 
 #[tonic::async_trait]
-impl Jigsaw for JigsawInstance {
+impl Thespian for ThespianInstance {
     #[instrument(skip_all, fields(trace_id = get_trace_id()))]
     async fn a(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
         self.grpc_method_a.enact().await
@@ -102,7 +102,7 @@ struct Function {
 impl Function {
     #[async_recursion]
     #[instrument(name = "Function.enact", skip(self), fields(trace_id = get_trace_id(), _tracing_name = self.tracing_name))]
-    async fn enact(&self) -> JigsawResult {
+    async fn enact(&self) -> ThespianResult {
         for operation in &self.operations {
             operation.enact().await?;
         }
@@ -117,7 +117,7 @@ enum Operation {
 }
 
 impl Operation {
-    async fn enact(&self) -> JigsawResult {
+    async fn enact(&self) -> ThespianResult {
         match self {
             Operation::ConcurrentActions(actions) => {
                 let action_futures: Vec<_> = actions.iter().map(|action| action.enact()).collect();
@@ -125,7 +125,7 @@ impl Operation {
                 futures::future::join_all(action_futures)
                     .await
                     .into_iter()
-                    .collect::<JigsawResult>()?;
+                    .collect::<ThespianResult>()?;
             }
             Operation::Action(action) => action.enact().await?,
         }
@@ -156,7 +156,7 @@ enum GrpcMethod {
 }
 
 impl Action {
-    async fn enact(&self) -> JigsawResult {
+    async fn enact(&self) -> ThespianResult {
         match self {
             Action::Function(f) => f.enact().await?,
             Action::CallService {
@@ -180,12 +180,12 @@ async fn issue_grpc_request(
     service_address: &str,
     service_port: &str,
     grpc_method: &GrpcMethod,
-) -> JigsawResult {
+) -> ThespianResult {
     let service_destination = format!("{service_address}:{service_port}");
 
     info!("starting grpc request to {service_destination}");
 
-    let mut client = JigsawClient::connect(service_destination.clone())
+    let mut client = ThespianClient::connect(service_destination.clone())
         .await
         .map_err(|err| err.to_string())?;
 
@@ -216,7 +216,7 @@ async fn sleep(
     _tracing_name: &str,
     duration_ms: &u64,
     failure_chance: &Option<f64>,
-) -> JigsawResult {
+) -> ThespianResult {
     info!("starting sleep for action '{_tracing_name}'");
 
     sleep_until(Instant::now() + Duration::from_millis(*duration_ms)).await;
