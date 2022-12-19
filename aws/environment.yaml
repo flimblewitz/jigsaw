@@ -3,7 +3,8 @@ Transform: 'AWS::Serverless-2016-10-31'
 Description: > 
   This cloudformation stack contains resources intended to serve as the "groundwork" for ECS services.
   Note that it uses only 2 AZs, which is the bare minimum required to be able to use an ALB.
-  Also note that the ALBSecurityGroup only allows HTTP traffic from the outside world because setting up a certificate in ACM is just more work to do.
+  Note that it only supports HTTP.
+    If you want HTTPS, you'll want to create a Route 53 Hosted Zone, a corresponding HTTPS cert in ACM, give the ALB a Route 53 record in that hosted zone, and then change the ALB to reference that cert.
 
 Parameters:
   DeveloperIpAddress:
@@ -326,11 +327,12 @@ Resources:
   ASG:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
+      DesiredCapacity: 1
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
       MaxSize: 1
-      MinSize: 1
+      MinSize: 0
       VPCZoneIdentifier:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
@@ -343,8 +345,15 @@ Resources:
           Arn: !GetAtt EC2InstanceProfile.Arn
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html#dynamic-references-ssm
         # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-optimized_AMI.html
-        ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id}}'
-        InstanceType: t4g.nano
+        
+        # arm64 is giving me some trouble when I try to build for it. It's a crate dependency issue
+        # ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id}}'
+        # InstanceType: t4g.nano
+        
+        # this image and instance type are for x86 architecture
+        ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id}}'
+        InstanceType: t3a.nano
+        
         SecurityGroupIds:
           - !Ref ECSSecurityGroup
         # in the absence of other special configurations, this seems to be all we need to bootstrap the ECS container agent
