@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     install_tracing(thespian_instance.service_name());
 
     let port = env::var("PORT").unwrap_or("6379".into());
-    let addr = format!("127.0.0.1:{port}").parse()?;
+    let addr = format!("0.0.0.0:{port}").parse()?;
 
     Server::builder()
         // tonic gives us this the trace_fn() method to initiate a span in a custom way for each inbound request. We'll use it to facilitate trace context propagation

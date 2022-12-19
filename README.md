@@ -106,6 +106,8 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 ## Requirements
 The `tonic-build` build dependency uses the `prost` crate, which requires [`protoc`](https://grpc.io/docs/protoc-installation/).
 
+See https://github.com/hyperium/tonic/tree/master/examples#examples for possible examples of what Ubuntu and Alpine need.
+
 ## How to test locally
 If you're using vscode, there are [launch configs](.vscode/launch.json) that you can use to kick off debugging sessions.
 
