@@ -10,6 +10,7 @@ instrumentation:
   cd instrumentation && docker compose up -d
 
 standalone_container:
+  # note that containers in a docker network must make requests to other containers in the network _using their container names as addresses_. That's why we don't use localhost in these environment variables
   # instrumentation containers must be running first
   OTEL_BACKEND_ADDRESS="http://tempo:4317" \
   LOKI_ADDRESS="http://loki:3100" \
@@ -18,11 +19,12 @@ standalone_container:
   docker run -d -p 6379:6379 -e OTEL_BACKEND_ADDRESS -e LOKI_ADDRESS -e PORT -e CONFIG_JSON --network instrumentation_thespian_instrumentation --name standalone_thespian thespian:debian-buster-slim
 
 call_service_container:
+  # note that containers in a docker network must make requests to other containers in the network _using their container names as addresses_. That's why we don't use localhost in these environment variables
   # instrumentation containers must be running first
   OTEL_BACKEND_ADDRESS="http://tempo:4317" \
   LOKI_ADDRESS="http://loki:3100" \
   PORT="6380" \
-  CONFIG_JSON="{\"service_name\":\"rob_playing_starfox\",\"grpc_method_a\":{\"tracing_name\":\"engage 'fun' subroutine\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"wiggle clamp hands in anticipation\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"excitedly crank more power into LED eyes\",\"duration_ms\":2000}},{\"CallService\":{\"tracing_name\":\"interface with starfox game\",\"service_address\":\"http://127.0.0.1\",\"service_port\":\"6379\",\"grpc_method\":\"A\"}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"spin torso 180 degrees and pat self on back\",\"duration_ms\":1000}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}" \
+  CONFIG_JSON="{\"service_name\":\"rob_playing_starfox\",\"grpc_method_a\":{\"tracing_name\":\"engage 'fun' subroutine\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"wiggle clamp hands in anticipation\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"excitedly crank more power into LED eyes\",\"duration_ms\":2000}},{\"CallService\":{\"tracing_name\":\"interface with starfox game\",\"service_address\":\"http://standalone_thespian\",\"service_port\":\"6379\",\"grpc_method\":\"A\"}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"spin torso 180 degrees and pat self on back\",\"duration_ms\":1000}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}" \
   docker run -d -p 6380:6380 -e OTEL_BACKEND_ADDRESS -e LOKI_ADDRESS -e PORT -e CONFIG_JSON --network instrumentation_thespian_instrumentation --name call_service_thespian thespian:debian-buster-slim
 
 standalone:
