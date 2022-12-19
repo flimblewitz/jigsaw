@@ -1,5 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: 'AWS::Serverless-2016-10-31'
+AWSTemplateFormatVersion: 2010-09-09
 Description: > 
   This cloudformation stack contains resources intended to serve as the "groundwork" for ECS services.
   Note that it uses only 2 AZs, which is the bare minimum required to be able to use an ALB.
@@ -412,7 +411,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -469,11 +468,11 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref ALB
-      Port: 80
+      Port: 80 # todo: grpc?
       Protocol: HTTP
       DefaultActions:
         - FixedResponseConfig:
             ContentType: text/plain
-            MessageBody: 'could not find an ALB action that matches your request'
+            MessageBody: could not find an ALB action that matches your request
             StatusCode: '503'
           Type: fixed-response

@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  This cloudformation represents a thespian's ECS service and all the associated resources to make that ECS service accessible from the outside world (via an ALB) or from other ECS services (via either ECS Service Connect or AWS Service Mesh).
+
+Parameters:
+  VPCId:
+    Type: String
+  ALBListenerARN:
+    Type: String
+  ALBListenerRulePriority:
+    Type: Number
+    Description: Every distinct service that is accessible via the ALB needs a distinct positive integer value for the corresponding ALB listener rule's priority. If we were doing something fancy with varying levels of request specificity, we would care about the actual comparative values, but we're not doing that, so we just need this value to be distinct across services.
+    MinValue: 1
+    MaxValue: 50000
+  ECSClusterName:
+    Type: String
+  ServiceImageArn:
+    Type: String
+  ServiceName:
+    Type: String
+    Description: This is what the the ECS service will be named. For traffic from the outside world (via ALB), this will have to be passed as the value of the 'thespian-service-name' header. For inter-ECS traffic, this will simply be its address.
+  ServicePort:
+    Type: String
+    Description: This is the 'PORT' environment variable.
+  EnvVarConfigJson:
+    Type: String
+    Description: This is the 'CONFIG_JSON' environment variable.
+  EnvVarOtelBackendAddress:
+    Type: String
+    Description: This is the 'OTEL_BACKEND_ADDRESS' environment variable.
+  EnvVarLokiAddress:
+    Type: String
+    Description: This is the 'LOKI_ADDRESS' environment variable.
+
+Resources:
+
+  # LogGroup:
+  #   Type: AWS::Logs::LogGroup
+  #   Properties:
+  #     LogGroupName: !Sub '/aws/ecs/${ECSClusterName}/${ServiceName}'
+  #     # RetentionInDays: 1
+
+  ECSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ ecs-tasks.amazonaws.com ]
+            Action: [ sts:AssumeRole ]
+      Policies:
+        - PolicyName: minimal permission to retrieve image
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Ref ServiceImageArn
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+        # - PolicyName: minimal permission to log to cloudwatch
+        #   PolicyDocument:
+        #     Version: 2012-10-17
+        #     Statement:
+        #       - Effect: Allow
+        #         Action:
+        #           - logs:CreateLogStream
+        #           - logs:PutLogEvents
+        #         Resource: !GetAtt LogGroup.Arn
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      NetworkMode: bridge # todo: service mesh? ecs service connect?
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: !Ref ServiceImageArn
+          PortMappings:
+            - ContainerPort: !Ref ServicePort
+              HostPort: 0
+              Protocol: tcp # todo: grpc?
+          Cpu: 16
+          MemoryReservation: 32
+          Memory: 32
+          Environment:
+            - Name: PORT
+              Value: !Ref ServicePort
+            - Name: CONFIG_JSON
+              Value: !Ref EnvVarConfigJson
+            - Name: OTEL_BACKEND_ADDRESS
+              Value: !Ref EnvVarOtelBackendAddress
+            - Name: LOKI_ADDRESS
+              Value: !Ref EnvVarLokiAddress
+          # LogConfiguration:
+          #   LogDriver: awslogs
+          #   Options:
+          #     awslogs-group: !Ref LogGroup
+          #     awslogs-region: !Ref AWS::Region
+          #     awslogs-stream-prefix: !Ref ServiceName
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !Ref ECSClusterName
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: !Ref ServiceName
+          ContainerPort: !Ref ServicePort
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckPath: /health-check
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP # todo: grpc?
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 3
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '204' # this is what your service is supposed to respond with from its health check endpoint if it's actually healthy
+      Port: !Ref ServicePort
+      Protocol: HTTP
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      TargetType: instance
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '60'
+        - Key: load_balancing.algorithm.type
+          Value: round_robin
+        - Key: slow_start.duration_seconds
+          Value: '0'
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPCId
+
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: thespian-service-name
+            Values:
+              - !Ref ServiceName
+      ListenerArn: !Ref ALBListenerARN
+      Priority: !Ref ALBListenerRulePriority
