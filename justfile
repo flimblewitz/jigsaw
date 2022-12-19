@@ -3,7 +3,7 @@ default:
 
 image:
   # --progress plain writes out all output instead of collapsing it in a nice colored animation. It's nice for thorough debugging
-  docker build -t thespian:debian-buster-slim -f Dockerfile.debian-buster-slim --progress plain .
+  docker build -t thespian:debian-buster-slim -f dockerfiles/Dockerfile.debian-buster-slim --progress plain .
 
 instrumentation:
   echo "starting grafana, loki, and tempo in the background"
