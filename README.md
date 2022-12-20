@@ -113,5 +113,5 @@ If you're using vscode, there are [launch configs](.vscode/launch.json) that you
 
 To issue gRPC requests, [`grpcurl`](https://github.com/fullstorydev/grpcurl) is pretty simple. For example:
 ```
-./grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6379 thespian.Thespian/A
+grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6379 thespian.Thespian/A
 ```

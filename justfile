@@ -44,10 +44,10 @@ call_service:
   cargo run
 
 ping_standalone:
-  ./grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6379 thespian.Thespian/A
+  grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6379 thespian.Thespian/A
 
 ping_call_service:
-  ./grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6380 thespian.Thespian/A
+  grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6380 thespian.Thespian/A
 
 enter_standalone_container:
   docker exec -it standalone_thespian /bin/sh

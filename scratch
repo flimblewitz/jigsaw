@@ -19,3 +19,16 @@ let's keep getting logs please. I expect I want one of these
   https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/struct.Layer.html
 
   https://docs.rs/tracing-logfmt/0.1.2/tracing_logfmt/
+
+inside docker containers:
+  wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz
+  tar -xf grpcurl_1.8.7_linux_x86_64.tar.gz
+  ./grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6379 thespian.Thespian/A
+
+  wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz
+  tar -xf grpcurl_1.8.7_linux_x86_64.tar.gz
+  ./grpcurl -plaintext -proto ./proto/thespian.proto -import-path ./proto localhost:6380 thespian.Thespian/A
+
+  # for continuous monitoring of what ports are being used
+  apt install net-tools
+  netstat -antc
