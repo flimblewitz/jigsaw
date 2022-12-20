@@ -83,6 +83,10 @@ fn install_tracing(service_name: String) {
     let otel_layer = env::var("OTEL_BACKEND_ADDRESS")
         .ok()
         .and_then(|otel_backend_address| {
+            if otel_backend_address.is_empty() {
+                return None;
+            }
+
             let otlp_exporter = opentelemetry_otlp::new_exporter()
                 .tonic()
                 // I have to use this because tempo expects otlp-style interactions on this port
@@ -108,6 +112,10 @@ fn install_tracing(service_name: String) {
         });
 
     let loki_layer = env::var("LOKI_ADDRESS").ok().and_then(|loki_address| {
+        if loki_address.is_empty() {
+            return None;
+        }
+
         let (loki_layer, loki_layer_task) = tracing_loki::layer(
             Url::parse(&loki_address).unwrap(),
             vec![("service_name".into(), service_name)]
