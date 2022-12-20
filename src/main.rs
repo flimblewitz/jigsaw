@@ -70,29 +70,6 @@ fn install_tracing(service_name: String) {
     // opentelemetry requires us to do this in order to later be able to propagate trace context via outbound requests
     set_text_map_propagator(TraceContextPropagator::new());
 
-    let otel_backend_address =
-        env::var("OTEL_BACKEND_ADDRESS").unwrap_or("http://localhost:4317".into());
-    let otlp_exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        // I have to use this because tempo expects otlp-style interactions on this port
-        .with_endpoint(otel_backend_address);
-    let otlp_tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(otlp_exporter)
-        .with_trace_config(
-            trace::config()
-                // this use of with_id_generator is unnecessary to specify because it's default behavior, but I include it here as a reminder that apparently this tracer is what actually generates new span ids
-                .with_id_generator(IdGenerator::default())
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    service_name.clone(),
-                )])),
-        )
-        // although install_simple gets the job done, "real" APIs ought to use install_batch instead for better performance
-        .install_simple()
-        .unwrap();
-    let tempo_otlp_layer = tracing_opentelemetry::layer().with_tracer(otlp_tracer);
-
     let stdout_log_layer = tracing_subscriber::fmt::layer().pretty();
 
     let filter_layer = EnvFilter::try_from_default_env()
@@ -100,11 +77,37 @@ fn install_tracing(service_name: String) {
         .unwrap();
 
     let collector = Registry::default()
-        .with(tempo_otlp_layer)
         .with(stdout_log_layer)
         .with(filter_layer);
 
-    if let Ok(loki_address) = env::var("LOKI_ADDRESS") {
+    let otel_layer = env::var("OTEL_BACKEND_ADDRESS")
+        .ok()
+        .and_then(|otel_backend_address| {
+            let otlp_exporter = opentelemetry_otlp::new_exporter()
+                .tonic()
+                // I have to use this because tempo expects otlp-style interactions on this port
+                .with_endpoint(otel_backend_address);
+
+            let otlp_tracer = opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(
+                    trace::config()
+                        // this use of with_id_generator is unnecessary to specify because it's default behavior, but I include it here as a reminder that apparently this tracer is what actually generates new span ids
+                        .with_id_generator(IdGenerator::default())
+                        .with_resource(Resource::new(vec![KeyValue::new(
+                            "service.name",
+                            service_name.clone(),
+                        )])),
+                )
+                // although install_simple gets the job done, "real" APIs ought to use install_batch instead for better performance
+                .install_simple()
+                .unwrap();
+
+            Some(tracing_opentelemetry::layer().with_tracer(otlp_tracer))
+        });
+
+    let loki_layer = env::var("LOKI_ADDRESS").ok().and_then(|loki_address| {
         let (loki_layer, loki_layer_task) = tracing_loki::layer(
             Url::parse(&loki_address).unwrap(),
             vec![("service_name".into(), service_name)]
@@ -113,11 +116,27 @@ fn install_tracing(service_name: String) {
             vec![].into_iter().collect(),
         )
         .unwrap();
+
         // this appears to be analogous to the "install" step for tempo_otlp_tracer
         tokio::spawn(loki_layer_task);
 
-        tracing::subscriber::set_global_default(collector.with(loki_layer)).unwrap();
-    } else {
-        tracing::subscriber::set_global_default(collector).unwrap();
+        Some(loki_layer)
+    });
+
+    // todo: identify a way to conditionally apply layers without having to use a match statement like this. Not being able to rely on the inferred types for the layers and collector makes it hard to factor that code out and allow the collector to be one of several possible types
+    match (otel_layer, loki_layer) {
+        (None, None) => {
+            tracing::subscriber::set_global_default(collector).unwrap();
+        }
+        (None, Some(loki_layer)) => {
+            tracing::subscriber::set_global_default(collector.with(loki_layer)).unwrap();
+        }
+        (Some(otel_layer), None) => {
+            tracing::subscriber::set_global_default(collector.with(otel_layer)).unwrap();
+        }
+        (Some(otel_layer), Some(loki_layer)) => {
+            tracing::subscriber::set_global_default(collector.with(otel_layer).with(loki_layer))
+                .unwrap();
+        }
     }
 }
