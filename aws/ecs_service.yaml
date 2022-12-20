@@ -1,30 +1,54 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >
-  This cloudformation represents a thespian's ECS service and all the associated resources to make that ECS service accessible from the outside world (via an ALB) or from other ECS services (via either ECS Service Connect or AWS Service Mesh).
+  This cloudformation represents a thespian's ECS service and all the associated resources to make that ECS service accessible from the outside world (via an ALB, if you choose to use one) or from other ECS services (via either ECS Service Connect or AWS Service Mesh).
+
+  Note that the UseALB parameter defines whether or not to bother associating your ECS service with an ALB. Other parameters will become required if you opt into this.
+
+  Note that it is assumed you have already created an ECR repository with the name "thespian" and pushed your thespian image to it with the "debian-buster-slim" tag. These two names are configurable via parameters, but it is also an unconfigurable requirement that the ECR repository is in the same account as this cloudformation stack.
 
 Parameters:
+  UseALB:
+    Type: String
+    Description: Set this to true if you have an existing ALB with an HTTPS listener through which you want to expose your ECS service to the outside world.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
   VPCId:
     Type: String
+    Description: This is only necessary if you set UseALB to true.
   ALBListenerARN:
     Type: String
+    Description: This is only necessary if you set UseALB to true.
   ALBListenerRulePriority:
     Type: Number
-    Description: Every distinct service that is accessible via the ALB needs a distinct positive integer value for the corresponding ALB listener rule's priority. If we were doing something fancy with varying levels of request specificity, we would care about the actual comparative values, but we're not doing that, so we just need this value to be distinct across services.
+    Description: This is only necessary if you set UseALB to true. Every distinct service that is accessible via the ALB needs a distinct positive integer value for the corresponding ALB listener rule's priority. If we were doing something fancy with varying levels of request specificity, we would care about the actual comparative values, but we're not doing that, so we just need this value to be distinct across services.
+    Default: 1
     MinValue: 1
     MaxValue: 50000
   ECSClusterName:
     Type: String
-  ServiceImageArn:
+    MinLength: 1
+  ECRRepositoryName:
     Type: String
+    Default: thespian
+    MinLength: 1
+  ServiceImageTag:
+    Type: String
+    Default: debian-buster-slim
+    MinLength: 1
   ServiceName:
     Type: String
-    Description: This is what the the ECS service will be named. For traffic from the outside world (via ALB), this will have to be passed as the value of the 'thespian-service-name' header. For inter-ECS traffic, this will simply be its address.
+    Description: This is what the the ECS service will be named. For traffic from the outside world (via ALB) this will have to be passed as the value of the 'thespian-service-name' header For inter-ECS service traffic, this will simply be its address thanks to service discovery facilitated by AWS Cloud Map working in conjunction with either ECS Service Connect or AWS Service Mesh (not yet implemented).
+    MinLength: 1
   ServicePort:
     Type: String
     Description: This is the 'PORT' environment variable.
+    AllowedPattern: ^\d+$
   EnvVarConfigJson:
     Type: String
     Description: This is the 'CONFIG_JSON' environment variable.
+    MinLength: 1
   EnvVarOtelBackendAddress:
     Type: String
     Description: This is the 'OTEL_BACKEND_ADDRESS' environment variable.
@@ -32,13 +56,15 @@ Parameters:
     Type: String
     Description: This is the 'LOKI_ADDRESS' environment variable.
 
+Conditions:
+  UseALB: !Equals [!Ref UseALB, 'true']
+
 Resources:
 
-  # LogGroup:
-  #   Type: AWS::Logs::LogGroup
-  #   Properties:
-  #     LogGroupName: !Sub '/aws/ecs/${ECSClusterName}/${ServiceName}'
-  #     # RetentionInDays: 1
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/ecs/${ECSClusterName}/${ServiceName}'
 
   ECSExecutionRole:
     Type: AWS::IAM::Role
@@ -51,7 +77,7 @@ Resources:
               Service: [ ecs-tasks.amazonaws.com ]
             Action: [ sts:AssumeRole ]
       Policies:
-        - PolicyName: minimal permission to retrieve image
+        - PolicyName: minimal_permission_to_retrieve_image
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -60,31 +86,30 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                   - ecr:BatchCheckLayerAvailability
-                Resource: !Ref ServiceImageArn
+                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepositoryName}'
               - Effect: Allow
                 Action: ecr:GetAuthorizationToken
                 Resource: '*'
-        # - PolicyName: minimal permission to log to cloudwatch
-        #   PolicyDocument:
-        #     Version: 2012-10-17
-        #     Statement:
-        #       - Effect: Allow
-        #         Action:
-        #           - logs:CreateLogStream
-        #           - logs:PutLogEvents
-        #         Resource: !GetAtt LogGroup.Arn
+        - PolicyName: minimal_permission_to_log_to_cloudwatch
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      NetworkMode: bridge # todo: service mesh? ecs service connect?
-      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
       ContainerDefinitions:
         - Name: !Ref ServiceName
-          Image: !Ref ServiceImageArn
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}:${ServiceImageTag}'
+          # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ecs-taskdefinition-containerdefinition.html#cfn-ecs-taskdefinition-containerdefinition-portmappings
           PortMappings:
-            - ContainerPort: !Ref ServicePort
-              HostPort: 0
+            - ContainerPort: !Ref ServicePort # todo: ecs service connect? aws service mesh?
+              HostPort: 0 # todo: ecs service connect? aws service mesh?
               Protocol: tcp # todo: grpc?
           Cpu: 16
           MemoryReservation: 32
@@ -98,12 +123,14 @@ Resources:
               Value: !Ref EnvVarOtelBackendAddress
             - Name: LOKI_ADDRESS
               Value: !Ref EnvVarLokiAddress
-          # LogConfiguration:
-          #   LogDriver: awslogs
-          #   Options:
-          #     awslogs-group: !Ref LogGroup
-          #     awslogs-region: !Ref AWS::Region
-          #     awslogs-stream-prefix: !Ref ServiceName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref ServiceName
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      NetworkMode: bridge # todo: service mesh? ecs service connect?
 
   ECSService:
     Type: AWS::ECS::Service
@@ -112,40 +139,50 @@ Resources:
       Cluster: !Ref ECSClusterName
       TaskDefinition: !Ref TaskDefinition
       LoadBalancers:
-        - ContainerName: !Ref ServiceName
-          ContainerPort: !Ref ServicePort
-          TargetGroupArn: !Ref ALBTargetGroup
+        !If 
+          - UseALB
+          - - ContainerName: !Ref ServiceName
+              ContainerPort: !Ref ServicePort
+              TargetGroupArn: !Ref ALBTargetGroup
+          - !Ref AWS::NoValue
 
   ALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: UseALB
     Properties:
+      # health check configuration is based on https://aws.amazon.com/blogs/aws/new-application-load-balancer-support-for-end-to-end-http-2-and-grpc/
       HealthCheckEnabled: true
-      HealthCheckPath: /health-check
+      HealthCheckPath: / # this is purposefully a path for which there is no grpc method. See the Matcher below
       HealthCheckPort: traffic-port
-      HealthCheckProtocol: HTTP # todo: grpc?
+      HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 10
       HealthCheckTimeoutSeconds: 3
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: '204' # this is what your service is supposed to respond with from its health check endpoint if it's actually healthy
+        # this is what your service is supposed to respond with from its health check endpoint if it's actually healthy
+        # for grpc, when you hit a nonexistent endpoint, you should get a status code of 12. We only care that it's responding at all, so this is good enough 
+        GrpcCode: '12'
       Port: !Ref ServicePort
       Protocol: HTTP
+      # TLDR: ALB listener rules can only forward to grpc target groups if the ALB listener is HTTPS
+      # if your ALB only has a listener for HTTP, the listener rule will fail to be created by cloudformation with the following error
+      ### Resource handler returned message: "Invalid request provided: AWS::ElasticLoadBalancingV2::ListenerRule Validation exception" (RequestToken: 5894feb7-3a5d-5bb3-4d90-115a5cf030ef, HandlerErrorCode: InvalidRequest)
+      # if you try in the UI to create a new ALB and attach a "listener" there, you will notice that your grpc target group isn't visible if you try to make an HTTP ALB listener. If you change to HTTPS, though, the grpc target group will suddenly become visible. If you select your grpc target group, the UI will erroneously let you switch the listener back to HTTP. At this point, if you try to create your load balancer with that HTTP listener, you'll see the following error message in the UI
+      ### Listener protocol 'HTTP' is not supported with a target group with the protocol-version 'GRPC'
+      ProtocolVersion: GRPC
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
-      TargetType: instance
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
-          Value: '60'
-        - Key: load_balancing.algorithm.type
-          Value: round_robin
-        - Key: slow_start.duration_seconds
-          Value: '0'
+          Value: '15'
+      TargetType: instance
       UnhealthyThresholdCount: 3
       VpcId: !Ref VPCId
 
   ALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: UseALB
     Properties:
       Actions:
         - Type: forward
