@@ -88,7 +88,7 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 - [x] configurable chaos (`failure_chance`)
 - [x] rename it from `jigsaw` to `thespian` because it seems like a better name in every regard
 - [x] add `just` integration to kick it all off faster
-- [ ] AWS ALB and ECS with ECS Service Connect
+- [x] AWS ALB and ECS with ECS Service Connect
 - [ ] AWS ALB and ECS with AWS Service Mesh (including retries and timeouts)
 - [ ] find way to clean up background jobs initiated by `just`
 - [ ] github actions CI/CD. Maybe Dagger too?

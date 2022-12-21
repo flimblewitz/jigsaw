@@ -346,6 +346,12 @@ Resources:
   ####################################################################
   ####################################################################
 
+  CloudMapNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties: 
+      Name: !Ref AWS::StackName
+      Vpc: !Ref VPC
+
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
