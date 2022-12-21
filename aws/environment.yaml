@@ -1,11 +1,20 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: > 
-  This cloudformation stack contains resources intended to serve as the "groundwork" for ECS services.
+  This cloudformation stack contains resources intended to serve as the "groundwork" for gRPC-based ECS services.
   Note that it uses only 2 AZs, which is the bare minimum required to be able to use an ALB.
-  Note that it only supports HTTP.
-    If you want HTTPS, you'll want to create a Route 53 Hosted Zone, a corresponding HTTPS cert in ACM, give the ALB a Route 53 record in that hosted zone, and then change the ALB to reference that cert.
+  Note that if you want to use an ALB, you must support HTTPS. This is because ALBs can only forward to gRPC ECS services from HTTPS ALB listeners. To support HTTPS, you'll have to create/import a certificate in ACM for a domain you own (you can buy one in ACM as part of creating a certificate there), create a Route 53 Hosted Zone for that domain, and then provide that ACM certificate's ARN as a parameter to this cloudformation stack.
 
 Parameters:
+  UseALB:
+    Type: String
+    Description: Set this to true if you want to expose ECS services to the outside world.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+  ACMCertificateARN:
+    Type: String
+    Description: This is only necessary if you set UseALB to true.
   DeveloperIpAddress:
     Type: String
     AllowedPattern: "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}$"
@@ -24,6 +33,9 @@ Parameters:
     MaxValue: 14
     # given 4 subnets and a VPC CIDR of 2^16 IPs, the number of IPs that can fit in 4 evenly spread subnets is 2^14
     Description: Don't pass in a value for this; the default is intentionally calculated based on fixed resources in this template. It's only a parameter because a parameter provides an easy way to not have to copy and paste a value.
+
+Conditions:
+  UseALB: !Equals [!Ref UseALB, 'true']
 
 Resources:
 
@@ -88,6 +100,7 @@ Resources:
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
+    Condition: UseALB
     Properties:
       AvailabilityZone: !Select
         - 0
@@ -100,12 +113,14 @@ Resources:
 
   PublicSubnet1AclAssociation:
     Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: UseALB
     Properties:
       NetworkAclId: !Ref VPCNetworkACL
       SubnetId: !Ref PublicSubnet1
 
   PublicSubnet1RouteTable:
     Type: AWS::EC2::RouteTable
+    Condition: UseALB
     Properties:
       VpcId: !Ref VPC
       Tags:
@@ -114,6 +129,7 @@ Resources:
 
   PublicSubnet1InternetGatewayRoute:
     Type: AWS::EC2::Route
+    Condition: UseALB
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref VPCInternetGateway
@@ -121,17 +137,20 @@ Resources:
 
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseALB
     Properties:
       RouteTableId: !Ref PublicSubnet1RouteTable
       SubnetId: !Ref PublicSubnet1
 
   PublicSubnet1NATElasticIP:
     Type: AWS::EC2::EIP
+    Condition: UseALB
     Properties:
       Domain: vpc
 
   PublicSubnet1NAT:
     Type: AWS::EC2::NatGateway
+    Condition: UseALB
     Properties:
       AllocationId: !GetAtt PublicSubnet1NATElasticIP.AllocationId
       SubnetId: !Ref PublicSubnet1
@@ -161,6 +180,7 @@ Resources:
 
   PrivateSubnet1NATRoute:
     Type: AWS::EC2::Route
+    Condition: UseALB
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref PublicSubnet1NAT
@@ -204,6 +224,7 @@ Resources:
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: UseALB
     Properties:
       AvailabilityZone: !Select
         - 1
@@ -216,12 +237,14 @@ Resources:
 
   PublicSubnet2AclAssociation:
     Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: UseALB
     Properties:
       NetworkAclId: !Ref VPCNetworkACL
       SubnetId: !Ref PublicSubnet2
 
   PublicSubnet2RouteTable:
     Type: AWS::EC2::RouteTable
+    Condition: UseALB
     Properties:
       VpcId: !Ref VPC
       Tags:
@@ -230,6 +253,7 @@ Resources:
 
   PublicSubnet2InternetGatewayRoute:
     Type: AWS::EC2::Route
+    Condition: UseALB
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref VPCInternetGateway
@@ -237,17 +261,20 @@ Resources:
 
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseALB
     Properties:
       RouteTableId: !Ref PublicSubnet2RouteTable
       SubnetId: !Ref PublicSubnet2
 
   PublicSubnet2NATElasticIP:
     Type: AWS::EC2::EIP
+    Condition: UseALB
     Properties:
       Domain: vpc
 
   PublicSubnet2NAT:
     Type: AWS::EC2::NatGateway
+    Condition: UseALB
     Properties:
       AllocationId: !GetAtt PublicSubnet2NATElasticIP.AllocationId
       SubnetId: !Ref PublicSubnet2
@@ -277,6 +304,7 @@ Resources:
 
   PrivateSubnet2NATRoute:
     Type: AWS::EC2::Route
+    Condition: UseALB
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref PublicSubnet2NAT
@@ -370,21 +398,22 @@ Resources:
           IpProtocol: '-1'
           ToPort: -1
       SecurityGroupIngress:
-        - Description: http traffic from ALB
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-          IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-        - Description: https traffic from ALB
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-        - Description: ECS port traffic from ALB (needed for ELB Target Group health checks)
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-          IpProtocol: tcp
-          FromPort: 32768
-          ToPort: 65535
+        - !If 
+            - UseALB
+            - Description: HTTP traffic from ALB
+              SourceSecurityGroupId: !Ref ALBSecurityGroup
+              IpProtocol: tcp
+              FromPort: 80
+              ToPort: 80
+            - !Ref AWS::NoValue
+        - !If 
+            - UseALB
+            - Description: ECS port traffic from ALB (needed for ELB Target Group health checks)
+              SourceSecurityGroupId: !Ref ALBSecurityGroup
+              IpProtocol: tcp
+              FromPort: 32768
+              ToPort: 6553580
+            - !Ref AWS::NoValue
         # TODO: confirm the following are actually necessary
         # - Description: ECS port traffic from private subnet 1
         #   CidrIp: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
@@ -426,6 +455,7 @@ Resources:
 
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Condition: UseALB
     Properties:
       Tags:
         - Key: Name
@@ -453,6 +483,7 @@ Resources:
 
   ALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: UseALB
     Properties:
       Name: !Ref AWS::StackName
       Type: application
@@ -466,13 +497,17 @@ Resources:
 
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: UseALB
     Properties:
-      LoadBalancerArn: !Ref ALB
-      Port: 80 # todo: grpc?
-      Protocol: HTTP
+      Certificates:
+        - CertificateArn: !Ref ACMCertificateARN
       DefaultActions:
         - FixedResponseConfig:
             ContentType: text/plain
             MessageBody: could not find an ALB action that matches your request
             StatusCode: '503'
           Type: fixed-response
+      LoadBalancerArn: !Ref ALB
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-2016-08
