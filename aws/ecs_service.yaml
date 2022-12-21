@@ -17,6 +17,12 @@ Parameters:
   VPCId:
     Type: String
     Description: This is only necessary if you set UseALB to true.
+  ALBDNSName:
+    Type: String
+    Description: This is only necessary if you set UseALB to true.
+  ALBCanonicalHostedZoneId:
+    Type: String
+    Description: This is only necessary if you set UseALB to true.
   ALBListenerARN:
     Type: String
     Description: This is only necessary if you set UseALB to true.
@@ -26,6 +32,12 @@ Parameters:
     Default: 1
     MinValue: 1
     MaxValue: 50000
+  PublicAddress:
+    Type: String
+    Description: This is only necessary if you set UseALB to true. Set this to whatever_subdomain_you_want.domain_you_own.com
+  PublicAddressRoute53HostedZoneId:
+    Type: String
+    Description: This is only necessary if you set UseALB to true. This must correspond to domain_you_own.com (as referenced by the PublicAddress parameter)
   ECSClusterName:
     Type: String
     MinLength: 1
@@ -188,10 +200,20 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref ALBTargetGroup
       Conditions:
-        - Field: http-header
-          HttpHeaderConfig:
-            HttpHeaderName: thespian-service-name
+        - Field: host-header
+          HostHeaderConfig:
             Values:
-              - !Ref ServiceName
+            - !Ref PublicAddress
       ListenerArn: !Ref ALBListenerARN
       Priority: !Ref ALBListenerRulePriority
+
+  Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    DependsOn: ECSService
+    Properties:
+      Name: !Ref PublicAddress
+      HostedZoneId: !Ref PublicAddressRoute53HostedZoneId
+      Type: A
+      AliasTarget:
+        DNSName: !Ref ALBDNSName
+        HostedZoneId: !Ref ALBCanonicalHostedZoneId

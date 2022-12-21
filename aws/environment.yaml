@@ -380,11 +380,10 @@ Resources:
         # this image and instance type are for x86 architecture
         ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id}}'
         InstanceType: t3a.nano
-        
         SecurityGroupIds:
           - !Ref ECSSecurityGroup
-        # in the absence of other special configurations, this seems to be all we need to bootstrap the ECS container agent
         # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bootstrap_container_instance.html#bootstrap_container_agent
+        # this is all we need to bootstrap the ECS container agent
         UserData: !Base64
           Fn::Sub: "#!/bin/bash\necho ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config"
 
@@ -412,19 +411,8 @@ Resources:
               SourceSecurityGroupId: !Ref ALBSecurityGroup
               IpProtocol: tcp
               FromPort: 32768
-              ToPort: 6553580
+              ToPort: 65535
             - !Ref AWS::NoValue
-        # TODO: confirm the following are actually necessary
-        # - Description: ECS port traffic from private subnet 1
-        #   CidrIp: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
-        #   FromPort: 32768
-        #   IpProtocol: tcp
-        #   ToPort: 65535
-        # - Description: ECS port traffic from private subnet 2
-        #   CidrIp: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, !Ref SubnetCount, !Ref SubnetMaskSize ] ]
-        #   FromPort: 32768
-        #   IpProtocol: tcp
-        #   ToPort: 65535
       Tags:
         - Key: Name
           Value: !Ref AWS::StackName
@@ -450,7 +438,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
-        # enables SSM session manager (I think the session manager functionality is already installed on ECS-optimized AMIs?)
+        # enables SSM session manager (session manager functionality is already installed on ECS-optimized AMIs)
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
   ALBSecurityGroup:
@@ -468,17 +456,11 @@ Resources:
           FromPort: -1
           ToPort: -1
       SecurityGroupIngress:
-        - Description: http traffic from you and nobody else
+        - Description: HTTPS traffic from you and nobody else
           CidrIp: !Sub '${DeveloperIpAddress}/32'
           IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-        # TODO: confirm the following is actually necessary
-        # - Description: traffic between ECS services
-        #   CidrIp: !GetAtt VPC.CidrBlock
-        #   IpProtocol: tcp
-        #   FromPort: 32768
-        #   ToPort: 65535
+          FromPort: 443
+          ToPort: 443
       VpcId: !Ref VPC
 
   ALB:
