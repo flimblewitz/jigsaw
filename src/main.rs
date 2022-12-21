@@ -70,7 +70,7 @@ fn install_tracing(service_name: String) {
     // opentelemetry requires us to do this in order to later be able to propagate trace context via outbound requests
     set_text_map_propagator(TraceContextPropagator::new());
 
-    let stdout_log_layer = tracing_subscriber::fmt::layer().pretty();
+    let stdout_log_layer = tracing_subscriber::fmt::layer().compact();
 
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
