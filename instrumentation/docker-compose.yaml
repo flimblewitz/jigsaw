@@ -2,8 +2,6 @@
 
 version: '3.9'
 
-# consider ditching this and just making everything use localhost with port bindings
-# I'm already binding to localhost so I can run thespian locally and debug quickly
 networks:
   thespian_instrumentation:
 

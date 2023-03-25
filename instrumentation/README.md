@@ -14,18 +14,19 @@ This gets you
 # Grafana
 The default grafana login is `admin`/`admin`.
 
-The configuration is based on two [official examples](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/)
-- https://github.com/grafana/tempo/blob/main/example/docker-compose/loki
+The Grafana config file is based on [official examples for running Grafana with Tempo via Docker Compose](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/#docker-compose)
+- https://github.com/grafana/tempo/blob/main/example/docker-compose/loki (this example was apparently deleted and I'm not sure what replaced it; the README files in that repo appear to have become increasingly inaccurate over time)
 - https://github.com/grafana/tempo/blob/main/example/docker-compose/local
+
 The highlights are
 - the baked-in registrations of Loki and Tempo as datasources
-- the `derivedFields` setting that links logs in the former to traces in the latter
-- the mapping of the `service_name` span attribute to `service.name` in Tempo because that's the magic keyword for service names in Tempo (spans won't be labeled nicely without it). In contrast, Loki doesn't allow periods in labels, so that's why `service_name` is the actual attribute name being used
+- the `derivedFields` setting that links logs in Loki to traces in Tempo
+- the mapping of the `service_name` span attribute to `service.name`. In Tempo, `service.name` is the magic keyword for service names (spans won't be labeled nicely without it). However, Loki doesn't allow periods in labels, so that's why `service_name` is the actual attribute name being used <!-- TODO confirm that this is actually all true, especially after trying out the opentelemetry collector -->
 
 # Loki
 Wait until Loki is ready according to http://localhost:3100/ready.
 
-The Loki config file being used is based on https://citizix.com/how-to-run-grafana-loki-with-docker-and-docker-compose/
+The Loki config file is based on https://citizix.com/how-to-run-grafana-loki-with-docker-and-docker-compose/
 
 ## Push a trace log manually 
 https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
@@ -48,6 +49,7 @@ curl -XPOST \
 ```
 
 # Tempo
+The Tempo config file is based on an [official example](https://github.com/grafana/tempo/blob/main/example/docker-compose/local/tempo-local.yaml)
 ## Push a trace log manually
 https://grafana.com/docs/tempo/latest/api_docs/pushing-spans-with-http/
 ```

@@ -4,7 +4,7 @@ Description: >
 
   Note that the UseALB parameter defines whether or not to bother associating your ECS service with an ALB. Other parameters will become required if you opt into this.
 
-  Note that it is assumed you have already created an ECR repository with the name "thespian" and pushed your thespian image to it with the "debian-buster-slim" tag. These two names are configurable via parameters, but it is also an unconfigurable requirement that the ECR repository is in the same account as this cloudformation stack.
+  Note that it is assumed you have already created an ECR repository (the name is configurable but assumed to be "thespian") in the same AWS account and pushed a docker image to it with a distinctive tag (configurable but assumed to be "debian-buster-slim").
 
 Parameters:
   UseALB:
@@ -154,7 +154,7 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
       ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
-      NetworkMode: bridge # todo: service mesh? ecs service connect?
+      NetworkMode: bridge
 
   ECSService:
     Type: AWS::ECS::Service
@@ -162,7 +162,6 @@ Resources:
       ServiceName: !Ref ServiceName
       ServiceConnectConfiguration:
         Enabled: true
-        # TODO: confirm that LogConfiguration is only for fancy metrics
         Namespace: !Ref CloudMapNamespaceARN
         Services: 
           # Note that each of these must match a Name property in the TaskeDefinition's ContainerDefinitions' PortMappings

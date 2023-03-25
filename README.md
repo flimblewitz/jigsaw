@@ -79,29 +79,37 @@ It's a limitation of the `tracing` crate: it needs to use hardcoded strings (`&'
 However, **your custom names are still on the spans**! They're just attributes with a key of `_tracing_name` instead (the leading underscore makes them come first alphabetically), so when you're looking at the UI of your distributed tracing backend (e.g. Grafana Tempo), you'll have to do some extra clicking in order to see them.
 
 # Is this done?
-The most important parts for instrumentation are done, so it's sufficient for local use. CI/CD for microservice architectures are still in the pipeline.
+The most important parts for instrumentation are done, so it's sufficient for local use. service meshing with ECS Service Connect is functional, but I want to create a proof of concept for Kubernetes as well. CI/CD for microservice architectures are still in the pipeline.
+
+## MVP
 - [x] ingest the config from an environment variable
 - [x] issue gRPC requests to other Thespian instances
 - [x] create docker-compose.yaml for Grafana, Loki, and Tempo
 - [x] emit tracing information
 - [x] preserve/propagate trace id across services
 - [x] configurable chaos (`failure_chance`)
-- [x] rename it from `jigsaw` to `thespian` because it seems like a better name in every regard
-- [x] add `just` integration to kick it all off faster
+## Service Mesh
 - [x] AWS ALB and ECS with ECS Service Connect
-- [ ] AWS ALB and ECS with AWS Service Mesh (including retries and timeouts)
+- [ ] local kubernetes
+- [ ] linkerd
+- [ ] AWS EKS
+## Polish
+- [x] add `just` integration to kick it all off faster
+- [ ] separate the `tonic-build` stuff into a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) so that it doesn't slow down the build or perhaps separate into crates like [Rust on Nails](https://rust-on-nails.com/docs/api/grpc/)
+- [ ] reassess the docker-compose.yaml for Grafana instrumentation against [the Grafana "TNS" (The New Stack) example](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml)
 - [ ] find way to clean up background jobs initiated by `just`
-- [ ] github actions CI/CD. Maybe Dagger too?
+- [ ] add container or script that just pokes Thespian over and over
+- [ ] [Tempo metrics](https://grafana.com/docs/tempo/latest/metrics-generator/) (APM dashboard, metrics from spans, and a service graph). The [example setups](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/) probably contain example configurations that enable them
+- [ ] `thespian -> otel collector -> loki/tempo` as an alternative to `thespian -> loki/tempo` because the former seems to be more realistic and the latter relies on the quirky `tracing-loki` crate
+- [ ] take a good, hard look at all those `todo` comments and auxiliary READMEs
+## CI/CD
+- [ ] github actions
+## Tentative
 - [ ] configurable timeouts for the service call action at the client level
 - [ ] configurable retries for actions at the client level
-- [ ] set up an alternative docker-compose.yaml using jaeger instead of tempo (make sure to enable otlp, which uses 4317 (see the collector component's definition) https://www.jaegertracing.io/docs/1.38/deployment/#all-in-one)
-- [ ] add container or script that just does grpcurl to poke a container over and over
-- [ ] [Tempo metrics](https://grafana.com/docs/tempo/latest/metrics-generator/) (APM dashboard, metrics from spans, and a service graph). The [example setups](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/) probably contain example configurations that enable them
-- [ ] kubernetes and linkerd/traefik mesh, then again with AWS EKS
-- [ ] try `thespian -> otel collector -> loki/tempo` instead of `thespian -> loki/tempo` because the former seems to be more realistic and the latter relies on the quirky `tracing-loki` crate
-- [ ] take a good, hard look at all those `todo` comments and auxiliary READMEs
+- [ ] jaeger as an alternative to tempo (make sure to enable otlp, which uses 4317. See [the collector component's definition](https://www.jaegertracing.io/docs/1.38/deployment/#all-in-one))
+- [ ] CI/CD using [Dagger](https://dagger.io)
 
----
 # Development
 ## Requirements
 The `tonic-build` build dependency uses the `prost` crate, which requires [`protoc`](https://grpc.io/docs/protoc-installation/).
