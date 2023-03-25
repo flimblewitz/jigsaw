@@ -15,6 +15,13 @@ Parameters:
   ACMCertificateARN:
     Type: String
     Description: This is only necessary if you set UseALB to true.
+  UseAppMesh:
+    Type: String
+    Description: Set this to true if you want to be able to use AppMesh to facilitate fancy retries and timeouts between microservices.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
   DeveloperIpAddress:
     Type: String
     AllowedPattern: "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}$"
@@ -36,6 +43,7 @@ Parameters:
 
 Conditions:
   UseALB: !Equals [!Ref UseALB, 'true']
+  UseAppMesh: !Equals [!Ref UseAppMesh, 'true']
 
 Resources:
 
@@ -351,6 +359,16 @@ Resources:
     Properties: 
       Name: !Ref AWS::StackName
       Vpc: !Ref VPC
+  
+  AppMesh:
+    Type: AWS::AppMesh::Mesh
+    Condition: UseAppMesh
+    Properties: 
+      MeshName: String
+      Spec: 
+        EgressFilter: 
+          # realistically, your services will probably want to make requests to the outside world. But we might as well make it restrictive for the sake of this example
+          Type: DROP_ALL
 
   ECSCluster:
     Type: AWS::ECS::Cluster

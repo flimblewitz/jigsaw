@@ -7,6 +7,9 @@ Description: >
   Note that it is assumed you have already created an ECR repository with the name "thespian" and pushed your thespian image to it with the "debian-buster-slim" tag. These two names are configurable via parameters, but it is also an unconfigurable requirement that the ECR repository is in the same account as this cloudformation stack.
 
 Parameters:
+
+  ### Parameters related to the ALB
+
   UseALB:
     Type: String
     Description: Set this to true if you have an existing ALB with an HTTPS listener through which you want to expose your ECS service to the outside world.
@@ -38,9 +41,28 @@ Parameters:
   PublicAddressRoute53HostedZoneId:
     Type: String
     Description: This is only necessary if you set UseALB to true. This must correspond to domain_you_own.com (as referenced by the PublicAddress parameter)
-  CloudMapNamespaceARN:
+
+  ### Parameters related to service mesh options
+
+  CloudMapNamespaceName:
     Type: String
     MinLength: 1
+  ServiceMeshType:
+    Type: String
+    Description: This is the type of AWS-managed service mesh to use. ECS Service Connect could be called a very rudimentary service mesh, but AppMesh is more-full-featured.
+    AllowedValues:
+      - ECSServiceConnect
+      - AppMesh
+    Default: ECSServiceConnect
+  AppMeshName:
+    Type: String
+    Description: This is only necessary if you set ServiceMeshType to AppMesh.
+  AppMeshVirtualServiceNameOfDownstreamService:
+    Type: String
+    Description: This is only necessary if you set ServiceMeshType to AppMesh. If your service 'A' is a client that calls another service 'B', this parameter will create the configuration required to facilitate that inter-service traffic from specifically A to B. In production, you would simply configure such relationships individually in the AppMesh virtual node on a case-by-case basis instead of via parameter like this. For the sake of this example, we're only going to bother optionally specifying a single downstream service.
+
+  ### Everything else
+
   ECSClusterName:
     Type: String
     MinLength: 1
@@ -75,6 +97,9 @@ Parameters:
 
 Conditions:
   UseALB: !Equals [!Ref UseALB, 'true']
+  UseECSServiceConnect: !Equals [!Ref ServiceMeshType, ECSServiceConnect]
+  UseAppMesh: !Equals [!Ref ServiceMeshType, AppMesh]
+  UseAppMeshVirtualServiceNameOfDownstreamService: !Not [!Equals [!Ref AppMeshVirtualServiceNameOfDownstreamService, '']]
 
 Resources:
 
@@ -122,8 +147,14 @@ Resources:
     Properties:
       # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html
       # these numbers are bigger than the single visible container because AWS recommends adding "256 CPU units and at least 64 MiB of memory" for the invisible container that ECS Service Connect adds to the task. In practice, it looks like we can get away with less than that
-      Cpu: 128
-      Memory: 64
+      Cpu: !If
+        - UseECSServiceConnect
+        - 128
+        - !Ref AWS::NoValue
+      Memory: !If
+        - UseECSServiceConnect
+        - 64
+        - !Ref AWS::NoValue
       ContainerDefinitions:
         - Name: !Ref ServiceName
           Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}:${ServiceImageTag}'
@@ -153,6 +184,42 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
+        - !If
+          - UseAppMesh
+          - Name: !Ref ServiceName
+            # https://docs.aws.amazon.com/app-mesh/latest/userguide/envoy.html
+            # We recommend allocating 512 CPU units and at least 64 MiB of memory to the Envoy container
+            # you'll have to update this literal string with newer image tags as time goes on, which sucks
+            # using a regional image might result in faster deployments, but you'll need an IAM policy granting ECS permission to pull it
+            # Image: !Sub '840364872350.dkr.ecr.${AWS::Region}.amazonaws.com/aws-appmesh-envoy:v1.24.0.0-prod'
+            Image: public.ecr.aws/appmesh/aws-appmesh-envoy:v1.24.0.0-prod
+            PortMappings:
+              - ContainerPort: !Ref ServicePort
+                HostPort: 0
+                # if our service actually used multiple ports, we'd probably want to name them differently so that ECS Service Connect could distinguish them
+                Name: !Ref ServiceName
+                Protocol: tcp
+            # I'm going to be greedy despite the resource recommendations
+            Cpu: 128
+            MemoryReservation: 64
+            Memory: 64
+            Environment:
+              - Name: PORT
+                Value: !Ref ServicePort
+              - Name: CONFIG_JSON
+                Value: !Ref EnvVarConfigJson
+              - Name: OTEL_BACKEND_ADDRESS
+                Value: !Ref EnvVarOtelBackendAddress
+              - Name: LOKI_ADDRESS
+                Value: !Ref EnvVarLokiAddress
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref LogGroup
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: !Ref ServiceName
+          - !Ref AWS::NoValue
+
       ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
       NetworkMode: bridge # todo: service mesh? ecs service connect?
 
@@ -161,20 +228,23 @@ Resources:
     Properties:
       ServiceName: !Ref ServiceName
       ServiceConnectConfiguration:
-        Enabled: true
-        # TODO: confirm that LogConfiguration is only for fancy metrics
-        Namespace: !Ref CloudMapNamespaceARN
-        Services: 
-          # Note that each of these must match a Name property in the TaskeDefinition's ContainerDefinitions' PortMappings
-          - PortName: !Ref ServiceName
-            # this is unnecessary if each other service that calls this one knows what port(s) this service uses, but normalizing it to 80 like this is probably a good standard
-            ClientAliases:
-              - DnsName: !Ref ServiceName
-                Port: 80
+        !If
+          - UseECSServiceConnect
+          - Enabled: true
+            # TODO: confirm that LogConfiguration is only for fancy metrics
+            Namespace: !Ref CloudMapNamespaceName
+            Services:
+              # Note that each of these must match a Name property in the TaskeDefinition's ContainerDefinitions' PortMappings
+              - PortName: !Ref ServiceName
+                # this is unnecessary if each other service that calls this one knows what port(s) this service uses, but normalizing it to 80 like this is probably a good standard
+                ClientAliases:
+                  - DnsName: !Ref ServiceName
+                    Port: 80
+          - !Ref AWS::NoValue
       Cluster: !Ref ECSClusterName
       TaskDefinition: !Ref TaskDefinition
       LoadBalancers:
-        !If 
+        !If
           - UseALB
           - - ContainerName: !Ref ServiceName
               ContainerPort: !Ref ServicePort
@@ -186,8 +256,10 @@ Resources:
     Condition: UseALB
     Properties:
       # health check configuration is based on https://aws.amazon.com/blogs/aws/new-application-load-balancer-support-for-end-to-end-http-2-and-grpc/
+      # This is roughly copied between the ALBTargetGroup and AppMeshVirtualNode
       HealthCheckEnabled: true
-      HealthCheckPath: / # this is purposefully a path for which there is no grpc method. See the Matcher below
+      # this is purposefully a path for which there is no grpc method. See the Matcher below
+      HealthCheckPath: /
       HealthCheckPort: traffic-port
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 10
@@ -195,7 +267,7 @@ Resources:
       HealthyThresholdCount: 2
       Matcher:
         # this is what your service is supposed to respond with from its health check endpoint if it's actually healthy
-        # for grpc, when you hit a nonexistent endpoint, you should get a status code of 12. We only care that it's responding at all, so this is good enough 
+        # for grpc, when you hit a nonexistent endpoint, you should get a status code of 12. We only care that it's responding at all, so this is good enough
         GrpcCode: '12'
       Port: !Ref ServicePort
       Protocol: HTTP
@@ -240,3 +312,148 @@ Resources:
       AliasTarget:
         DNSName: !Ref ALBDNSName
         HostedZoneId: !Ref ALBCanonicalHostedZoneId
+
+  AppMeshVirtualNode:
+    Type: AWS::AppMesh::VirtualNode
+    Condition: UseAppMesh
+    Properties:
+      MeshName: !Ref AppMeshName
+      Spec:
+        # note that Backends and Listeners have options for TLS. This seems to represent mTLS
+        Backends:
+          !If
+            - UseAppMeshVirtualServiceNameOfDownstreamService
+            - - VirtualService:
+                  VirtualServiceName: !Ref AppMeshVirtualServiceNameOfDownstreamService
+            - !Ref AWS::NoValue
+        Listeners:
+          - # Of the following, only the PortMapping is required, but they're cool so I'm including them
+            ConnectionPool:
+              GRPC:
+                  MaxRequests: 999
+            # This is roughly copied between the ALBTargetGroup and AppMeshVirtualNode
+            HealthCheck:
+              HealthyThreshold: 2
+              IntervalMillis: 10000
+              # this is purposefully a path for which there is no grpc method. See the Matcher below
+              Path: /
+              Port: !Ref ServicePort
+              Protocol: grpc
+              TimeoutMillis: 3000
+              UnhealthyThreshold: 3
+            OutlierDetection:
+              BaseEjectionDuration:
+                Unit: ms
+                Value: 5000
+              Interval:
+                Unit: ms
+                Value: 10000
+              MaxEjectionPercent: 50
+              # Number of consecutive 5xx errors required for ejection
+              MaxServerErrors: 5
+            PortMapping:
+              Port: !Ref ServicePort
+              Protocol: grpc
+            Timeout:
+              GRPC:
+                # I'm not sure what's good practice for this
+                # An idle timeout bounds the amount of time that a connection may be idle
+                Idle:
+                  Unit: ms
+                  Value: 10000
+                # The default value is 15 seconds
+                # AWS reminds us in the documentation for this to be aware that this affects all upstream callers
+                # TODO: confirm a way to enforce this for specific paths as well. This is just for all inbound requests
+                PerRequest:
+                  Unit: ms
+                  Value: 5000
+        Logging:
+          AccessLog:
+            File:
+              # TODO: this seems to be envoy-specific configuration
+              # Format:
+              #   LoggingFormat
+              # You can use /dev/stdout to send access logs to standard out and configure your Envoy container to use a log driver, such as awslogs, to export the access logs to a log storage service such as Amazon CloudWatch Logs
+              Path: /dev/stdout
+        ServiceDiscovery:
+          AWSCloudMap:
+            # TODO: determine if there is weird default behavior for IPs
+            # IpPreference: String
+            NamespaceName: !Ref CloudMapNamespaceName
+            ServiceName: !Ref ServiceName
+      VirtualNodeName: !Ref ServiceName
+
+  AppMeshVirtualRouter:
+    Type: AWS::AppMesh::VirtualRouter
+    Condition: UseAppMesh
+    Properties:
+      MeshName: !Ref AppMeshName
+      Spec:
+        Listeners:
+          - PortMapping:
+              Port: !Ref ServicePort
+              Protocol: grpc
+
+      VirtualRouterName: !Ref ServiceName
+
+  AppMeshVirtualService:
+    Type: AWS::AppMesh::VirtualService
+    Condition: UseAppMesh
+    Properties:
+      MeshName: !Ref AppMeshName
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: !GetAtt AppMeshVirtualRouter.VirtualRouterName
+      VirtualServiceName: !Ref ServiceName
+
+  # we need one of these per route if we want to be able to configure per-route timeouts/retries
+  AppMeshRoute:
+    Type: AWS::AppMesh::Route
+    Condition: UseAppMesh
+    Properties:
+      MeshName: !Ref AppMeshName
+      RouteName: A
+      Spec:
+        # https://docs.aws.amazon.com/app-mesh/latest/userguide/routes.html
+        GrpcRoute:
+          Action:
+            WeightedTargets:
+              - # TODO: confirm that Port is safe to omit here
+                # Port: !Ref ServicePort
+                VirtualNode: !Ref AppMeshVirtualNode
+                Weight: 100
+          Match:
+            # Metadata:
+            MethodName: A
+            # Port: !Ref ServicePort
+            # The fully qualified domain name for the service to match from the request.
+            # TODO: confirm that this works
+            ServiceName: !Ref ServiceName
+          RetryPolicy:
+            # https://docs.aws.amazon.com/app-mesh/latest/userguide/best-practices.html
+            # https://github.com/aws/aws-app-mesh-roadmap/issues/7
+            # https://docs.aws.amazon.com/app-mesh/latest/userguide/routes.html
+            # https://docs.aws.amazon.com/app-mesh/latest/userguide/envoy-defaults.html
+            # these configuration options are unsatisfactorily documented. AWS doesn't provide a clear list of the options, and imply that there is ambiguous overlap with Envoy (where some Envoy options will work, others won't, and some options are AWS-specific and must map to Envoy options)
+            # the specific documentation for these options is ultimately buried in Envoy's documentation
+            # https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-retrypolicy
+            # https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/router_filter#config-http-filters-router-x-envoy-retry-grpc-on
+            GrpcRetryEvents:
+              - cancelled
+              # - deadline-exceeded
+              - internal
+              - unavailable
+            HttpRetryEvents:
+              # this appears to be specific to AWS and is documented in CloudFormation
+              # HTTP status codes 500, 501, 502, 503, 504, 505, 506, 507, 508, 510, and 511
+              - server-error
+            MaxRetries: 2
+            PerRetryTimeout:
+              Value: 5000
+              Unit: ms
+            TcpRetryEvents:
+              - 5xx
+              # this doesn't appear to exist in Envoy even though the AWS best practices and envoy defaults cite it as a recommended option. The latter implies that it maps to Envoy's "connect-failure" option
+              - connection-error
+      VirtualRouterName: !GetAtt AppMeshVirtualRouter.VirtualRouterName
