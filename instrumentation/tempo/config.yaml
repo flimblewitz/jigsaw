@@ -8,18 +8,12 @@ distributor:
         grpc:
 
 ingester:
-  trace_idle_period: 10s               # the length of time after a trace has not received spans to consider it complete and flush it
-  max_block_bytes: 1_000_000           # cut the head block when it hits this size or ...
-  max_block_duration: 5m               #   this much time passes
+  max_block_duration: 5m               # cut the headblock when this much time passes. this is being set for demo purposes and should probably be left alone normally
 
 compactor:
   compaction:
-    compaction_window: 1h              # blocks in this time window will be compacted together
-    max_block_bytes: 100_000_000       # maximum size of compacted blocks
-    block_retention: 1h
-    compacted_block_retention: 10m
+    block_retention: 1h                # overall Tempo trace retention. set for demo purposes
 
-# metrics_generator_enabled: true
 # metrics_generator:
 #   registry:
 #     external_labels:
@@ -34,18 +28,14 @@ compactor:
 storage:
   trace:
     backend: local                     # backend configuration to use
-    block:
-      bloom_filter_false_positive: .05 # bloom filter false positive rate.  lower values create larger filters but fewer false positives
-      index_downsample_bytes: 1000     # number of bytes per index record
-      encoding: zstd                   # block encoding/compression.  options: none, gzip, lz4-64k, lz4-256k, lz4-1M, lz4, snappy, zstd, s2
     wal:
       path: /tmp/tempo/wal             # where to store the the wal locally
-      encoding: snappy                 # wal encoding/compression.  options: none, gzip, lz4-64k, lz4-256k, lz4-1M, lz4, snappy, zstd, s2
     local:
       path: /tmp/tempo/blocks
-    pool:
-      max_workers: 100                 # worker pool determines the number of parallel requests to the object store backend
-      queue_depth: 10000
 
 overrides:
-  metrics_generator_processors: [service-graphs, span-metrics]
+  # metrics_generator_processors: [service-graphs, span-metrics] # enables metrics generator
+  # these two are defaulting to 0 and causing rate limiting errors, e.g. "RATE_LIMITED: ingestion rate limit (0 bytes) exceeded while adding 727 bytes"
+  # these values are overkill, but they're supposed to be the defaults
+  ingestion_burst_size_bytes: 20000000
+  ingestion_rate_limit_bytes: 15000000

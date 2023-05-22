@@ -7,7 +7,7 @@ networks:
 
 services:
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana:9.4.7
     networks:
       - thespian_instrumentation
     ports:
@@ -16,17 +16,15 @@ services:
       - ./grafana:/etc/grafana/provisioning/datasources
 
   loki:
-    image: grafana/loki:2.5.0
+    image: grafana/loki:2.7.4
     networks:
       - thespian_instrumentation
     ports:
       - 3100:3100 # default loki port
-    volumes:
-      - ./loki:/etc/loki
-    command: -config.file=/etc/loki/config.yaml
+    command: -config.file=/etc/loki/local-config.yaml # this file is built into the image
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.0.1
     networks:
       - thespian_instrumentation
     ports:

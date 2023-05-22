@@ -14,9 +14,7 @@ This gets you
 # Grafana
 The default grafana login is `admin`/`admin`.
 
-The Grafana config file is based on [official examples for running Grafana with Tempo via Docker Compose](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/#docker-compose)
-- https://github.com/grafana/tempo/blob/main/example/docker-compose/loki (this example was apparently deleted and I'm not sure what replaced it; the README files in that repo appear to have become increasingly inaccurate over time)
-- https://github.com/grafana/tempo/blob/main/example/docker-compose/local
+The Grafana datasources file is based on [an official example for running Grafana with Loki, Tempo, and Prometheus via Docker Compose](https://github.com/grafana/tns/blob/main/production/docker-compose/datasources.yaml) named "TNS" (The New Stack).
 
 The highlights are
 - the baked-in registrations of Loki and Tempo as datasources
@@ -26,9 +24,8 @@ The highlights are
 # Loki
 Wait until Loki is ready according to http://localhost:3100/ready.
 
-The Loki config file is based on https://citizix.com/how-to-run-grafana-loki-with-docker-and-docker-compose/
-
-## Push a trace log manually 
+I'm using Loki's super convenient [baked-in local configuration file](https://github.com/grafana/loki/blob/main/cmd/loki/loki-local-config.yaml) as recommended by [the official example for running the Grafana Agent locally via Docker Compose](https://github.com/grafana/agent/blob/main/example/docker-compose/docker-compose.yaml) and [the official "TNS" example](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml).
+## Push a log manually
 https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
 ```
 curl -XPOST \
@@ -49,8 +46,8 @@ curl -XPOST \
 ```
 
 # Tempo
-The Tempo config file is based on an [official example](https://github.com/grafana/tempo/blob/main/example/docker-compose/local/tempo-local.yaml)
-## Push a trace log manually
+The Tempo config file is based on an [official example](https://github.com/grafana/tempo/blob/main/example/docker-compose/shared/tempo.yaml) for [running locally via Docker Compose](https://github.com/grafana/tempo/blob/main/example/docker-compose/local/docker-compose.yaml).
+## Push a trace span manually
 https://grafana.com/docs/tempo/latest/api_docs/pushing-spans-with-http/
 ```
 curl -X POST http://localhost:9411 -H 'Content-Type: application/json' -d '[{
