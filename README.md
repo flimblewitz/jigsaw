@@ -88,6 +88,12 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 - [x] emit tracing information
 - [x] preserve/propagate trace id across services
 - [x] configurable chaos (`failure_chance`)
+## Instrumentation
+- [ ] review the instrumentation `docker-compose.yaml` against [the Grafana "TNS" (The New Stack) example](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml)
+- [ ] explore Tempo's [TraceQL](https://grafana.com/docs/tempo/latest/traceql/) feature for trace discovery, which [requires Parquet format to be enabled as is the default behavior of Tempo 2.0](https://grafana.com/docs/tempo/latest/configuration/parquet/)
+- [ ] add Prometheus and configure Tempo to use it to enable [Tempo metrics](https://grafana.com/docs/tempo/latest/metrics-generator/) (APM dashboard, metrics from spans, and a service graph). The [example setups](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/) probably contain example configurations that enable them. It may just come down to the commented-out "metrics generator" lines in the existing Tempo config file
+- [ ] stop sending spans and logs directly to Tempo and Loki and instead start using the Grafana Agent as an intermediary based on [the official Docker Compose example](https://github.com/grafana/agent/blob/main/example/docker-compose/README.md) and whatever other information is relevant in [the official setup documentation](https://grafana.com/docs/agent/latest/set-up/). Also note that this will mean retiring the `tracing-loki` crate
+- [ ] enable [node_exporter](https://grafana.com/docs/agent/latest/configuration/integrations/node-exporter-config/) functionality to the Grafana Agent (it might be as easy as [a single line](https://github.com/grafana/agent/blob/main/example/docker-compose/agent/config/agent.yaml#LL86C4-L86C17), [two lines](https://grafana.com/grafana/dashboards/12558-node-exporter-from-agent-integration/), or [another container](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml#L121))
 ## Service Mesh
 - [x] AWS ALB and ECS with ECS Service Connect
 - [ ] local kubernetes
@@ -96,12 +102,11 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 ## Polish
 - [x] add `just` integration to kick it all off faster
 - [ ] separate the `tonic-build` stuff into a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) so that it doesn't slow down the build or perhaps separate into crates like [Rust on Nails](https://rust-on-nails.com/docs/api/grpc/)
-- [ ] reassess the docker-compose.yaml for Grafana instrumentation against [the Grafana "TNS" (The New Stack) example](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml)
+- [ ] try to eliminate the need for the docker compose network because official examples don't use one
 - [ ] find way to clean up background jobs initiated by `just`
 - [ ] add container or script that just pokes Thespian over and over
-- [ ] [Tempo metrics](https://grafana.com/docs/tempo/latest/metrics-generator/) (APM dashboard, metrics from spans, and a service graph). The [example setups](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/) probably contain example configurations that enable them
-- [ ] `thespian -> otel collector -> loki/tempo` as an alternative to `thespian -> loki/tempo` because the former seems to be more realistic and the latter relies on the quirky `tracing-loki` crate
-- [ ] take a good, hard look at all those `todo` comments and auxiliary READMEs
+- [ ] take a good, hard look at all those `todo/TODO` comments and auxiliary READMEs
+- [ ] introduce the Opentelemetry Collector as an alternative to the Grafana Agent
 ## CI/CD
 - [ ] github actions
 ## Tentative
