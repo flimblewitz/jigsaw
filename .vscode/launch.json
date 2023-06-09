@@ -7,15 +7,15 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'thespian-server' with 'server' example config",
+      "name": "Debug executable 'thespian_server' with 'server' example config",
       "cargo": {
         "args": [
           "build",
-          "--bin=thespian-server",
-          "--package=thespian"
+          "--bin=thespian_server",
+          "--package=thespian_server"
         ],
         "filter": {
-          "name": "thespian-server",
+          "name": "thespian_server",
           "kind": "bin"
         }
       },
@@ -25,21 +25,22 @@
         "OTEL_BACKEND_ADDRESS": "http://localhost:4317",
         "LOKI_ADDRESS": "http://localhost:3100",
         "PORT": "6379",
-        "CONFIG_JSON": "{\"service_name\":\"starfox_simulator\",\"grpc_method_a\":{\"tracing_name\":\"do_a_barrel_roll\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"listen_to_peppy\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"press L\",\"duration_ms\":2000}},{\"Sleep\":{\"tracing_name\":\"press R\",\"duration_ms\":1500,\"failure_chance\":0.5}},{\"Function\":{\"tracing_name\":\"accidentally unplug controller\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"instinctually yank the controller to physically pull the arwing into a barrel roll\",\"duration_ms\":1000,\"failure_chance\":0.4}}},{\"Action\":{\"Sleep\":{\"tracing_name\":\"unplug the cord, unintentionally harmonizing your scream with the sound of slippy perishing\",\"duration_ms\":1000,\"failure_chance\":0.3}}}]}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"die horribly\",\"duration_ms\":1000,\"failure_chance\":0.1}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}"
+        "SERVICE_NAME": "starfox_simulator",
+        "CONFIG_JSON": "{\"grpc_method_a\":{\"tracing_name\":\"do_a_barrel_roll\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"listen_to_peppy\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"press L\",\"duration_ms\":2000}},{\"Sleep\":{\"tracing_name\":\"press R\",\"duration_ms\":1500,\"failure_chance\":0.5}},{\"Function\":{\"tracing_name\":\"accidentally unplug controller\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"instinctually yank the controller to physically pull the arwing into a barrel roll\",\"duration_ms\":1000,\"failure_chance\":0.4}}},{\"Action\":{\"Sleep\":{\"tracing_name\":\"unplug the cord, unintentionally harmonizing your scream with the sound of slippy perishing\",\"duration_ms\":1000,\"failure_chance\":0.3}}}]}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"die horribly\",\"duration_ms\":1000,\"failure_chance\":0.1}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}"
       }
     },
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'thespian-server' with 'client' example config",
+      "name": "Debug executable 'thespian_server' with 'client' example config",
       "cargo": {
         "args": [
           "build",
-          "--bin=thespian-server",
-          "--package=thespian"
+          "--bin=thespian_server",
+          "--package=thespian_server"
         ],
         "filter": {
-          "name": "thespian-server",
+          "name": "thespian_server",
           "kind": "bin"
         }
       },
@@ -49,22 +50,23 @@
         "OTEL_BACKEND_ADDRESS": "http://localhost:4317",
         "LOKI_ADDRESS": "http://localhost:3100",
         "PORT": "6380",
-        "CONFIG_JSON": "{\"service_name\":\"rob_playing_starfox\",\"grpc_method_a\":{\"tracing_name\":\"engage fun subroutine\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"wiggle clamp hands in anticipation\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"excitedly crank more power into LED eyes\",\"duration_ms\":2000}},{\"CallService\":{\"tracing_name\":\"interface with starfox game\",\"service_address\":\"http://localhost\",\"service_port\":\"6379\",\"grpc_method\":\"A\"}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"spin torso 180 degrees and pat self on back\",\"duration_ms\":1000}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}"
+        "SERVICE_NAME": "rob_playing_starfox",
+        "CONFIG_JSON": "{\"grpc_method_a\":{\"tracing_name\":\"engage fun subroutine\",\"operations\":[{\"Action\":{\"Sleep\":{\"tracing_name\":\"wiggle clamp hands in anticipation\",\"duration_ms\":1000}}},{\"ConcurrentActions\":[{\"Sleep\":{\"tracing_name\":\"excitedly crank more power into LED eyes\",\"duration_ms\":2000}},{\"CallService\":{\"tracing_name\":\"interface with starfox game\",\"service_address\":\"http://localhost\",\"service_port\":\"6379\",\"grpc_method\":\"A\"}}]},{\"Action\":{\"Sleep\":{\"tracing_name\":\"spin torso 180 degrees and pat self on back\",\"duration_ms\":1000}}}]},\"grpc_method_b\":null,\"grpc_method_c\":null}"
       }
     },
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'thespian-server'",
+      "name": "Debug unit tests in executable 'thespian_server'",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "--bin=thespian-server",
-          "--package=thespian"
+          "--bin=thespian_server",
+          "--package=thespian_server"
         ],
         "filter": {
-          "name": "thespian-server",
+          "name": "thespian_server",
           "kind": "bin"
         }
       },

@@ -1,17 +1,12 @@
 use async_recursion::async_recursion;
-use tonic::{Request, Response, Status};
-mod tonic_thespian {
-    tonic::include_proto!("thespian");
-}
 use opentelemetry::{global::get_text_map_propagator, propagation::Injector};
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
-use tokio::time::{sleep_until, Duration, Instant};
-use tonic_thespian::{
-    thespian_client::ThespianClient,
-    thespian_server::{Thespian, ThespianServer},
-    Nothing,
+use thespian_tonic_build::protobuf::{
+    thespian_client::ThespianClient, thespian_server::Thespian, Nothing,
 };
+use tokio::time::{sleep_until, Duration, Instant};
+use tonic::{Request, Response, Status};
 use tracing::{error, info, instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -33,7 +28,6 @@ impl<'a> Injector for TonicMetadataMap<'a> {
 
 #[derive(Deserialize, Debug)]
 pub struct ThespianInstance {
-    service_name: String,
     grpc_method_a: OptionalFunction,
     grpc_method_b: OptionalFunction,
     grpc_method_c: OptionalFunction,
@@ -42,23 +36,6 @@ pub struct ThespianInstance {
 impl ThespianInstance {
     pub fn new(config_json: &str) -> Self {
         serde_json::from_str(config_json).unwrap()
-    }
-
-    // todo: try to make this cleaner
-    // other modules (like main) can't easily recognize the same tonic-built types (contained in the "tonic_thespian" module defined at the top of this file)
-    // there is a way, but it's intrusive. You have to make the tonic_thespian module public and then use the following two lines in other modules:
-    /*
-        use crate::tonic_thespian::thespian_server::Thespian;
-        use thespian_instance::tonic_thespian;
-    */
-    // but because the only other module in question really only needs something that implements all the traits that make up a tonic "Service", and that's all neatly wrapped up for us in the generated ThespianServer type, we can just return the ThespianServer type here and be done with it
-    // todo: this is dependent on how to expose the service name, but consider making the only public function in this file one that outputs a ThespianServer
-    pub fn as_server(self) -> ThespianServer<Self> {
-        ThespianServer::new(self)
-    }
-
-    pub fn service_name(&self) -> String {
-        self.service_name.clone()
     }
 }
 

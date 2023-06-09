@@ -1,29 +1,16 @@
-[package]
-name = "thespian"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+    "thespian_server",
+    "thespian_tonic_build",
+]
+# I may not need this, but I'm going to use it
+default-members = ["thespian_server"]
 
-[[bin]]
-name = "thespian-server"
-path = "src/main.rs"
+# we don't want to define a root package since there isn't actually any root package content
+# in other words, this root project is "virtual", and that means this file has to be a "virtual manifest", which is defined by the absence of the package section
+# if we were to include a package section despite not having any actual root project code to comprise that package, cargo would get confused and ask for such a target to be defined/created
 
-[dependencies]
-tokio = { version = "1.20.1", features = ["rt", "macros"] }
-tonic = "0.8.0"
-prost = "0.11.0"
-serde =  { version = "1.0", features = ["derive"] }
-serde_json = "1.0.85"
-async-recursion = "1.0.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-futures = "0.3.24"
-opentelemetry-otlp = "0.10.0"
-tracing-opentelemetry = "0.17.4"
-opentelemetry = "0.17.0"
-tracing-loki = "0.2.1"
-url = "2.2.2"
-http = "0.2.8"
-rand = "0.8.5"
-
-[build-dependencies]
-tonic-build = "0.8.0"
+# according to https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html#depending-on-an-external-package-in-a-workspace, if I use the same dependency in multiple workspace package, then cargo will demand that they all be the same version (and it will only install the dependency once, as all dependencies in a workspace are actually implicitly installed at the workspace level to be inherited by all the packages)
+# but it looks like I can define common dependencies with explicit versions here and then reference them in the workspace packages' Cargo.toml files as "dependencyName.workspace"
+# see https://doc.rust-lang.org/cargo/reference/workspaces.html#the-dependencies-table
+# TODO: try doing that

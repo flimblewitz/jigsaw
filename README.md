@@ -53,6 +53,7 @@ For the sake of flexing your instrumentation's muscles by making Thespian scenar
 ## How do I configure it?
 Use the following environment variables:
 - `PORT`: the port Thespian runs on
+- `SERVICE_NAME`: the service name that Thespian includes in its spans and span events. This should be unique per Thespian instance
 - `CONFIG_JSON`: this defines the behavior for Thespian's three gRPC methods. The specification is defined by the types in [the thespian_instance.rs file](/src/thespian_instance.rs). There are examples in [the example_configs folder](example_configs)
 - `OTEL_BACKEND_ADDRESS`: this defines the gRPC address of the OpenTelemetry backend (e.g. Tempo) to which your Thespian instance should send its spans and span events. The default value is `http://localhost:4317`
 - `LOKI_ADDRESS`: if you want Thespian to send span events directly to a Loki instance, fill this in. Example: `http://localhost:3200`
@@ -101,7 +102,7 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 - [ ] AWS EKS
 ## Polish
 - [x] add `just` integration to kick it all off faster
-- [ ] separate the `tonic-build` stuff into a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) so that it doesn't slow down the build or perhaps separate into crates like [Rust on Nails](https://rust-on-nails.com/docs/api/grpc/)
+- [x] separate the `tonic-build` stuff into a [cargo workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html) so that it doesn't slow down the build or perhaps separate into crates like [Rust on Nails](https://rust-on-nails.com/docs/api/grpc/)
 - [ ] try to eliminate the need for the docker compose network because official examples don't use one
 - [ ] find way to clean up background jobs initiated by `just`
 - [ ] add container or script that just pokes Thespian over and over

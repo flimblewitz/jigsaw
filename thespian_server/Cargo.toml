@@ -1,0 +1,24 @@
+[package]
+name = "thespian_server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+thespian_tonic_build = { path = "../thespian_tonic_build" }
+tokio = { version = "1.20.1", features = ["rt", "macros"] }
+tonic = "0.8.0"
+serde =  { version = "1.0", features = ["derive"] }
+serde_json = "1.0.85"
+async-recursion = "1.0.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures = "0.3.24"
+opentelemetry-otlp = "0.10.0"
+tracing-opentelemetry = "0.17.4"
+opentelemetry = "0.17.0"
+tracing-loki = "0.2.1"
+url = "2.2.2"
+http = "0.2.8"
+rand = "0.8.5"

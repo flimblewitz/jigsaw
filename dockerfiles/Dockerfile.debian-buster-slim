@@ -4,13 +4,13 @@ WORKDIR /usr/src/app
 
 # directories must be explicitly copied to matching directories because COPY dumps all of the source directory's contents into the destination
 # alternatively, we could use a .dockerignore file and then just do `COPY . .`
-COPY proto ./proto
-COPY src ./src
-COPY build.rs Cargo* ./
+COPY thespian_server ./thespian_server
+COPY thespian_tonic_build ./thespian_tonic_build
+COPY Cargo* ./
 
-RUN cargo install --locked --path .
+RUN cargo install --locked --path ./thespian_server
 
 FROM debian:buster-slim
-COPY --from=builder /usr/local/cargo/bin/thespian-server /usr/local/bin/thespian-server
+COPY --from=builder /usr/local/cargo/bin/thespian_server /usr/local/bin/thespian_server
 RUN apt update && apt install -y libssl-dev
-CMD ["thespian-server"]
+CMD ["thespian_server"]

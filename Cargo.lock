@@ -1254,7 +1254,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "thespian"
+name = "thespian_server"
 version = "0.1.0"
 dependencies = [
  "async-recursion",
@@ -1262,18 +1262,26 @@ dependencies = [
  "http",
  "opentelemetry",
  "opentelemetry-otlp",
- "prost 0.11.0",
  "rand",
  "serde",
  "serde_json",
+ "thespian_tonic_build",
  "tokio",
  "tonic 0.8.0",
- "tonic-build 0.8.0",
  "tracing",
  "tracing-loki",
  "tracing-opentelemetry",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "thespian_tonic_build"
+version = "0.1.0"
+dependencies = [
+ "prost 0.11.0",
+ "tonic 0.8.0",
+ "tonic-build 0.8.0",
 ]
 
 [[package]]

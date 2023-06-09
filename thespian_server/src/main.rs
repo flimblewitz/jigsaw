@@ -16,6 +16,7 @@ use url::Url;
 mod get_trace_id;
 mod thespian_instance;
 use thespian_instance::ThespianInstance;
+use thespian_tonic_build::protobuf::thespian_server::ThespianServer;
 
 struct HeaderMap<'a>(&'a http::HeaderMap);
 
@@ -34,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_json = env::var("CONFIG_JSON")?;
     let thespian_instance = ThespianInstance::new(&config_json);
 
-    install_tracing(thespian_instance.service_name());
+    install_tracing(env::var("SERVICE_NAME")?);
 
     let port = env::var("PORT").unwrap_or("6379".into());
     let addr = format!("0.0.0.0:{port}").parse()?;
@@ -59,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             span
         })
-        .add_service(thespian_instance.as_server())
+        .add_service(ThespianServer::new(thespian_instance))
         .serve(addr)
         .await?;
 
