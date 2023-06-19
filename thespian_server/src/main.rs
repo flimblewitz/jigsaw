@@ -2,7 +2,7 @@ use http;
 use opentelemetry::{
     global::set_text_map_propagator,
     propagation::{Extractor, TextMapPropagator},
-    sdk::{propagation::TraceContextPropagator, trace, trace::IdGenerator, Resource},
+    sdk::{propagation::TraceContextPropagator, trace, Resource},
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
@@ -99,7 +99,7 @@ fn install_tracing(service_name: String) {
                 .with_trace_config(
                     trace::config()
                         // this use of with_id_generator is unnecessary to specify because it's default behavior, but I include it here as a reminder that apparently this tracer is what actually generates new span ids
-                        .with_id_generator(IdGenerator::default())
+                        .with_id_generator(trace::RandomIdGenerator::default())
                         .with_resource(Resource::new(vec![KeyValue::new(
                             "service.name",
                             service_name.clone(),
