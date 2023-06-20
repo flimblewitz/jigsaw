@@ -1,16 +1,21 @@
 # these paths are relative to the justfile 
 PATH_TO_PROTOFILE := "thespian_tonic_build/proto/thespian.proto"
 PATH_TO_PROTOFILE_DIRECTORY := "thespian_tonic_build/proto"
+
+PATH_TO_THESPIAN_LOCAL_LOGS_DIRECTORY := "thespian_local_logs"
+
 DEFAULT_GRPC_METHOD := "thespian.Thespian/A"
 
 IMAGE_NAME := "thespian:debian-buster-slim"
 PATH_TO_DOCKERFILE := "dockerfiles/Dockerfile.debian-buster-slim"
 
-OTEL_BACKEND_PORT := "4317"
-LOKI_PORT := "3100"
+# # this is for direct local tempo
+# OTEL_BACKEND_PORT := "4317"
+# this is for the grafana agent
+OTEL_BACKEND_PORT := "3601"
 
 # this is what `docker compose` ends up naming it
-DOCKER_INSTRUMENTATION_NETWORK := "instrumentation_thespian_instrumentation"
+DOCKER_INSTRUMENTATION_NETWORK := "instrumentation_instrumentation"
 
 SERVER_CONTAINER_NAME := "server_thespian"
 SERVER_PORT := "6379"
@@ -35,18 +40,21 @@ build_image:
     --progress plain \
     .
 
-# starts a docker network with grafana, loki, and tempo
+# starts a docker network with grafana, loki, tempo, and the grafana agent
 instrumentation:
-  cd instrumentation && docker compose up -d
+  cd instrumentation && \
+  THESPIAN_LOCAL_LOGS_DIRECTORY={{justfile_directory()}}/{{PATH_TO_THESPIAN_LOCAL_LOGS_DIRECTORY}} \
+  docker compose up -d
 
 # starts a thespian on localhost. Assumes instrumentation is up
+# writes logs into a single corresponding file in a folder inside of this repo
 local port service_name config_json:
+  mkdir -p {{justfile_directory()}}/{{PATH_TO_THESPIAN_LOCAL_LOGS_DIRECTORY}}
   OTEL_BACKEND_ADDRESS="http://localhost:{{OTEL_BACKEND_PORT}}" \
-  LOKI_ADDRESS="http://localhost:{{LOKI_PORT}}" \
   PORT={{port}} \
   SERVICE_NAME={{service_name}} \
   CONFIG_JSON="{{config_json}}" \
-  cargo run
+  cargo run > {{justfile_directory()}}/{{PATH_TO_THESPIAN_LOCAL_LOGS_DIRECTORY}}/{{service_name}}.log
 
 @server_local:
   just local \
@@ -61,24 +69,19 @@ local port service_name config_json:
     '{{replace(CLIENT_CONFIG_JSON,"SERVER_HOST_NAME","localhost")}}'
 
 # starts a thespian container bound to localhost. Assumes instrumentation is up
+# note that the container is being added to the instrumentation network
+# note that the container is being given a label of "thespian". This allows the grafana agent to ignore other containers' logs
 container port service_name config_json container_name:
-  # note that containers in a docker network must make requests to other containers in the network using their container names as addresses. That's why we don't use localhost in these environment variables
-  # TODO: try stuffing these environment variables into the -e options of the docker run command. I think that's an option
-  OTEL_BACKEND_ADDRESS="http://tempo:{{OTEL_BACKEND_PORT}}" \
-  LOKI_ADDRESS="http://loki:{{LOKI_PORT}}" \
-  PORT={{port}} \
-  SERVICE_NAME={{service_name}} \
-  CONFIG_JSON="{{config_json}}" \
   docker run \
     -d \
     -p {{port}}:{{port}} \
-    -e OTEL_BACKEND_ADDRESS \
-    -e LOKI_ADDRESS \
-    -e PORT \
-    -e SERVICE_NAME \
-    -e CONFIG_JSON \
+    -e OTEL_BACKEND_ADDRESS="http://grafana_agent:{{OTEL_BACKEND_PORT}}" \
+    -e PORT={{port}} \
+    -e SERVICE_NAME={{service_name}} \
+    -e CONFIG_JSON="{{config_json}}" \
     --network {{DOCKER_INSTRUMENTATION_NETWORK}} \
     --name {{container_name}} \
+    --label thespian \
     {{IMAGE_NAME}}
 
 @server_container:
@@ -117,4 +120,4 @@ client_ping:
 
 
 enter_container container_name:
-  docker exec -it {{container_name}} /bin/sh
+  docker exec -it {{container_name}} /bin/bash

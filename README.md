@@ -26,18 +26,21 @@ In this repo's [instrumentation](instrumentation) folder, there are instructions
 - [Grafana Loki](https://grafana.com/oss/loki/) lets you search your span events
 - [Grafana Tempo](https://grafana.com/oss/tempo/) assembles traces
 
+The means by which Thespian sends the aforementioned observability information _into_ those observability backends is via the [Grafana Agent](https://grafana.com/docs/agent/latest/), which is an alternative to the standard OpenTelemetry Collector. The Grafana Agent is configured to
+- read span event (log) files associated with Thespian
+- receive spans as gRPC messages directly from Thespian
+and then forward them in batches to Loki and Tempo respectively.
+
 ## What rust crates facilitate that?
 - [`tracing`](https://docs.rs/tracing/latest/tracing/) lets us create spans and span events in and around our code
 - [`opentelemetry`](https://docs.rs/opentelemetry/latest/opentelemetry/) lets us propagate distributed tracing context along inbound and outbound requests so that spans can encapsulate microservice interactions
 - [`tracing_opentelemetry`](https://docs.rs/tracing-opentelemetry/latest/tracing_opentelemetry/) lets us exchange distributed tracing context between `tracing` and `opentelemetry`
 - [`tracing_subscriber`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/index.html) lets us actually collect spans and span events created by `tracing`. It also lets us write span events to stdout if desired
 - [`opentelemetry_otlp`](https://docs.rs/opentelemetry-otlp/latest/opentelemetry_otlp/) lets us emit collected spans and span events to an OpenTelemetry-compliant observability backend (e.g. Grafana Tempo)
-- [`tracing_loki`](https://docs.rs/tracing-loki/latest/tracing_loki/) lets us emit collected span events to Grafana Loki specifically
 
 ### Among those rust crates and their interactions, are there any quirks worth noting?
 Yeah.
 - in order to associate each individual span with its trace, I had to make a [`get_trace_id`](src/get_trace_id.rs) helper function and explicitly instrument every function with its output
-- `tracing_loki` automatically adds a label for the log `level`, which is against the official best practices for Grafana Loki
 
 # What do you mean by "act out arbitrary configured behavior"?
 Thespian has 3 unary gRPC methods literally named `A`, `B`, and `C` that do nothing by default and [use an empty gRPC message as input and output](proto/thespian.proto).
@@ -93,7 +96,8 @@ The most important parts for instrumentation are done, so it's sufficient for lo
 - [ ] review the instrumentation `docker-compose.yaml` against [the Grafana "TNS" (The New Stack) example](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml)
 - [ ] explore Tempo's [TraceQL](https://grafana.com/docs/tempo/latest/traceql/) feature for trace discovery, which [requires Parquet format to be enabled as is the default behavior of Tempo 2.0](https://grafana.com/docs/tempo/latest/configuration/parquet/)
 - [ ] add Prometheus and configure Tempo to use it to enable [Tempo metrics](https://grafana.com/docs/tempo/latest/metrics-generator/) (APM dashboard, metrics from spans, and a service graph). The [example setups](https://grafana.com/docs/tempo/latest/getting-started/example-demo-app/) probably contain example configurations that enable them. It may just come down to the commented-out "metrics generator" lines in the existing Tempo config file
-- [ ] stop sending spans and logs directly to Tempo and Loki and instead start using the Grafana Agent as an intermediary based on [the official Docker Compose example](https://github.com/grafana/agent/blob/main/example/docker-compose/README.md) and whatever other information is relevant in [the official setup documentation](https://grafana.com/docs/agent/latest/set-up/). Also note that this will mean retiring the `tracing-loki` crate
+- [x] stop sending spans and logs directly to Tempo and Loki and instead start using the Grafana Agent as an intermediary based on [the official Docker Compose example](https://github.com/grafana/agent/blob/main/example/docker-compose/README.md) and whatever other information is relevant in [the official setup documentation](https://grafana.com/docs/agent/latest/set-up/)
+- [ ] mention somewhere that Thespian is remarkably similar to [the archived Omnition synthetic load generator](https://github.com/Omnition/synthetic-load-generator), which is used by the aforementioned official Grafana Agent Docker Compose example, and that's neat
 - [ ] enable [node_exporter](https://grafana.com/docs/agent/latest/configuration/integrations/node-exporter-config/) functionality to the Grafana Agent (it might be as easy as [a single line](https://github.com/grafana/agent/blob/main/example/docker-compose/agent/config/agent.yaml#LL86C4-L86C17), [two lines](https://grafana.com/grafana/dashboards/12558-node-exporter-from-agent-integration/), or [another container](https://github.com/grafana/tns/blob/main/production/docker-compose/docker-compose.yml#L121))
 ## Service Mesh
 - [x] AWS ALB and ECS with ECS Service Connect

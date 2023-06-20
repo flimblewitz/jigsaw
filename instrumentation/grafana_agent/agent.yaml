@@ -1,0 +1,118 @@
+server:
+  log_level: debug
+
+logs:
+  configs:
+    - name: default
+      clients:
+        - url: http://${LOKI_HOST}/loki/api/v1/push
+      positions:
+        filename: /tmp/positions.yaml
+      scrape_configs:
+        - job_name: thespian_local_logs
+          pipeline_stages:
+            - json:
+                expressions:
+                  message: message
+                  level: level
+                  timestamp: timestamp
+                  trace_id: span.trace_id
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+            - template:
+                source: level
+                template: '{{ ToLower .Value }}'
+            - labels:
+                level:
+            - template:
+                source: final_output
+                # I would include level here instead of making it a label, but Grafana doesn't show the nice histogram colors if I do so even though it's officially recommended not to use level as a label (https://grafana.com/blog/2020/04/21/how-labels-in-loki-can-make-log-queries-faster-and-easier/)
+                template: '{{ $myDict := dict "message" .message "trace_id" .trace_id }}{{ $myDict | mustToJson }}'
+            - output:
+                source: final_output
+          # I would love to remove the "filename" label that's being automatically included, but it can't be removed for some reason
+          # relabel_configs:
+          #   - regex: 'filename'
+          #     action: labeldrop
+          static_configs:
+            # these blocks do have to be hardcoded. There isn't a dynamic way to discover log files and apply dynamic labels to the logs inside 
+            - targets: [localhost]
+              labels:
+                service_name: local_starfox_simulator
+                __path__: /thespian_local_logs/starfox_simulator.log
+            - targets: [localhost]
+              labels:
+                service_name: local_rob_playing_starfox
+                __path__: /thespian_local_logs/rob_playing_starfox.log
+        # the pipeline_stages are the same as above, but static_configs and docker_sd_configs are apparently mutually exclusive, so we need two scrape_configs jobs
+        - job_name: thespian_container_logs
+          pipeline_stages:
+            - json:
+                expressions:
+                  message: message
+                  level: level
+                  timestamp: timestamp
+                  trace_id: span.trace_id
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+            - template:
+                source: level
+                template: '{{ ToLower .Value }}'
+            - labels:
+                level:
+            - template:
+                source: final_output
+                # I would include level here instead of making it a label, but Grafana doesn't show the nice histogram colors if I do so even though it's officially recommended not to use level as a label (https://grafana.com/blog/2020/04/21/how-labels-in-loki-can-make-log-queries-faster-and-easier/)
+                template: '{{ $myDict := dict "message" .message "trace_id" .trace_id }}{{ $myDict | mustToJson }}'
+            - output:
+                source: final_output
+          docker_sd_configs:
+            - host: unix:///var/run/docker.sock
+              refresh_interval: 5s
+              filters:
+                # this makes it so that the grafana agent ignores the logs being written by any non-thespian containers (like those of the grafana agent itself)
+                - name: label
+                  values: [thespian]
+          relabel_configs:
+            - source_labels: ['__meta_docker_container_name']
+              # docker prefixes the container name with a "/" for some reason. Let's remove that
+              regex: '/(.*)'
+              target_label: service_name
+
+traces:
+  configs:
+  # note that there are a lot of configuration options for this that are being left with their default values
+  - name: default
+    remote_write:
+      - endpoint: ${TEMPO_HOST}
+        insecure: true
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            # the default value is 0.0.0.0:4317, but tempo will be running on that port, so let's pick a different one for the grafana agent to use
+            endpoint: 0.0.0.0:3601
+#
+# Integrations
+#
+# Uncomment individual integrations below to enable them. Some integrations are
+# enabled by default.
+#
+
+# integrations:
+#   metrics:
+#     autoscrape:
+#       enable: true
+#       metrics_instance: default
+
+#   # agent
+#   agent:
+#     # The Agent dashboards are written to assume Kubernetes, so we inject some
+#     # fake Kubernetes labels here.
+#     extra_labels:
+#       cluster: docker-compose
+#       namespace: docker-compose
+#       container: grafana-agent
+#       pod: grafana-agent-${HOSTNAME:-example}

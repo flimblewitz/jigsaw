@@ -1,15 +1,15 @@
-# this was mostly copied from the official example: https://github.com/grafana/tempo/blob/main/example/docker-compose/local/docker-compose.yaml
+# note that I can use a .env file like this: https://docs.docker.com/compose/environment-variables/set-environment-variables/
 
 version: '3.9'
 
 networks:
-  thespian_instrumentation:
+  instrumentation:
 
 services:
   grafana:
     image: grafana/grafana:9.4.7
     networks:
-      - thespian_instrumentation
+      - instrumentation
     ports:
       - 3000:3000 # default grafana port
     volumes:
@@ -18,7 +18,7 @@ services:
   loki:
     image: grafana/loki:2.7.4
     networks:
-      - thespian_instrumentation
+      - instrumentation
     ports:
       - 3100:3100 # default loki port
     command: -config.file=/etc/loki/local-config.yaml # this file is built into the image
@@ -26,10 +26,43 @@ services:
   tempo:
     image: grafana/tempo:2.0.1
     networks:
-      - thespian_instrumentation
+      - instrumentation
     ports:
       - 3200:3200  # default tempo port (seems to be for queries)
       - 4317:4317  # default otlp grpc port (seems to be for ingestion)
     volumes:
       - ./tempo:/etc/tempo
     command: -config.file=/etc/tempo/config.yaml
+
+  grafana_agent:
+    image: grafana/agent:v0.33.2
+    networks:
+      - instrumentation
+    depends_on:
+      - loki
+      - tempo
+    volumes:
+      - ./grafana_agent:/etc/agent-config
+      # the ":ro" suffix is part of the "short syntax" for volumes: https://docs.docker.com/compose/compose-file/compose-file-v3/#short-syntax-3
+      # this bind mount is needed to read the logs written by local thespians that are running directly on the host
+      - ${THESPIAN_LOCAL_LOGS_DIRECTORY}:/thespian_local_logs:ro
+      # these bind mounts are needed to read logs written by containerized thespians
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run:/var/run:ro
+    entrypoint:
+      # annoyingly, the official example references an older and nonexistent version of the binary
+      - /bin/grafana-agent
+      - -config.file=/etc/agent-config/agent.yaml
+      - -enable-features=integrations-next
+      - -server.http.address=0.0.0.0:12345
+      # - -metrics.wal-directory=/tmp/agent/wal
+      # this replaces placeholders in the config file with their matching environment variables' values
+      - -config.expand-env
+      - -config.enable-read-api
+    environment:
+      HOSTNAME: agent
+      LOKI_HOST: loki:3100
+      TEMPO_HOST: tempo:4317
+    ports:
+      - 12345:12345
+      - 3601:3601

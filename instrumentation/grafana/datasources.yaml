@@ -34,6 +34,8 @@ datasources:
   jsonData:
     derivedFields:
       - datasourceUid: tempo
-        matcherRegex: \"(?:trace_id)\":\"(\w+)\" # thespian sends its logs in json format to loki, probably due to the tracing-loki crate
+        matcherRegex: \"(?:trace_id)\":\"(\w+)\"
         name: trace_id
         url: $${__value.raw}
+      - matcherRegex: \"(?:message)\":\"(.*?)\"
+        name: message
